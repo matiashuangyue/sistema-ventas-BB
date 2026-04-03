@@ -50,6 +50,7 @@ model Variante {
   producto Producto @relation(fields: [productoId], references: [id])
   precios  PrecioVariante[]
   detalles VentaDetalle[]
+  compras CompraDetalle[]
 }
 
 model ListaPrecio {
@@ -93,5 +94,28 @@ model VentaDetalle {
   subtotal       Float
 
   venta    Venta    @relation(fields: [ventaId], references: [id])
+  variante Variante @relation(fields: [varianteId], references: [id])
+}
+
+model Compra {
+  id            Int             @id @default(autoincrement())
+  proveedor     String?
+  fecha         DateTime        @default(now())
+  total         Float
+  observaciones String?
+  createdAt     DateTime        @default(now())
+
+  detalles CompraDetalle[]
+}
+
+model CompraDetalle {
+  id            Int      @id @default(autoincrement())
+  compraId      Int
+  varianteId    Int
+  cantidad      Int
+  costoUnitario Float
+  subtotal      Float
+
+  compra   Compra   @relation(fields: [compraId], references: [id])
   variante Variante @relation(fields: [varianteId], references: [id])
 }

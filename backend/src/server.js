@@ -418,7 +418,124 @@ app.get("/auth/me", authMiddleware, async (req, res) => {
   });
 });
 
+// 👉 crear compra / ingreso de stock
+app.post("/compras", authMiddleware, async (req, res) => {
+  try {
+    const { proveedor = null, observaciones = null, items } = req.body;
 
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "La compra debe incluir al menos un item" });
+    }
+
+    const compra = await prisma.$transaction(async (tx) => {
+      let total = 0;
+
+      for (const item of items) {
+        if (!item.varianteId || !item.cantidad || item.costoUnitario == null) {
+          throw new Error("Hay items incompletos en la compra");
+        }
+
+        if (item.cantidad <= 0) {
+          throw new Error("La cantidad debe ser mayor a 0");
+        }
+
+        if (item.costoUnitario < 0) {
+          throw new Error("El costo unitario no puede ser negativo");
+        }
+
+        const variante = await tx.variante.findUnique({
+          where: { id: item.varianteId },
+        });
+
+        if (!variante) {
+          throw new Error(`La variante con ID ${item.varianteId} no existe`);
+        }
+
+        total += item.cantidad * item.costoUnitario;
+      }
+
+      const nuevaCompra = await tx.compra.create({
+        data: {
+          proveedor,
+          total,
+          observaciones,
+        },
+      });
+
+      for (const item of items) {
+        const subtotal = item.cantidad * item.costoUnitario;
+
+        await tx.compraDetalle.create({
+          data: {
+            compraId: nuevaCompra.id,
+            varianteId: item.varianteId,
+            cantidad: item.cantidad,
+            costoUnitario: item.costoUnitario,
+            subtotal,
+          },
+        });
+
+        await tx.variante.update({
+          where: { id: item.varianteId },
+          data: {
+            stock: {
+              increment: item.cantidad,
+            },
+          },
+        });
+      }
+
+      return await tx.compra.findUnique({
+        where: { id: nuevaCompra.id },
+        include: {
+          detalles: {
+            include: {
+              variante: {
+                include: {
+                  producto: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    res.json(compra);
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({
+      error: error.message || "Error creando compra",
+    });
+  }
+});
+
+// 👉 listar compras
+app.get("/compras", authMiddleware, async (req, res) => {
+  try {
+    const compras = await prisma.compra.findMany({
+      orderBy: {
+        id: "desc",
+      },
+      include: {
+        detalles: {
+          include: {
+            variante: {
+              include: {
+                producto: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    res.json(compras);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error obteniendo compras" });
+  }
+});
 
 
 
