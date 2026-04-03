@@ -166,82 +166,64 @@ app.get("/precios-variantes", async (req, res) => {
 // 👉 crear venta
 app.post("/ventas", async (req, res) => {
   try {
-    const { clienteId = null, descuento = 0, items } = req.body;
+    const { clienteId = null, listaPrecioId, descuento = 0, items } = req.body;
+
+    if (!listaPrecioId) {
+      return res.status(400).json({ error: "Debe indicar una lista de precio" });
+    }
 
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: "La venta debe incluir al menos un item" });
+      return res.status(400).json({ error: "La venta debe incluir items" });
     }
 
     const venta = await prisma.$transaction(async (tx) => {
       let subtotal = 0;
 
+      const nuevaVenta = await tx.venta.create({
+        data: {
+          clienteId,
+          subtotal: 0,
+          descuento,
+          total: 0,
+        },
+      });
+
       for (const item of items) {
-        if (!item.varianteId || !item.cantidad || !item.precioUnitario) {
-          throw new Error("Hay items incompletos en la venta");
-        }
-
-        if (item.cantidad <= 0) {
-          throw new Error("La cantidad debe ser mayor a 0");
-        }
-
-        if (item.precioUnitario < 0) {
-          throw new Error("El precio unitario no puede ser negativo");
-        }
-
         const variante = await tx.variante.findUnique({
           where: { id: item.varianteId },
         });
 
         if (!variante) {
-          throw new Error(`La variante con ID ${item.varianteId} no existe`);
+          throw new Error("Variante no encontrada");
         }
 
         if (variante.stock < item.cantidad) {
-          throw new Error(
-            `Stock insuficiente para ${variante.nombre}. Stock actual: ${variante.stock}`
-          );
+          throw new Error(`Stock insuficiente para ${variante.nombre}`);
         }
 
-        const descuentoItem = item.descuentoItem || 0;
-        const subtotalItem = item.cantidad * item.precioUnitario - descuentoItem;
+        // 👉 buscar precio según lista
+        const precioData = await tx.precioVariante.findFirst({
+          where: {
+            varianteId: item.varianteId,
+            listaPrecioId,
+          },
+        });
 
-        if (subtotalItem < 0) {
-          throw new Error(`El subtotal del item ${variante.nombre} no puede ser negativo`);
+        if (!precioData) {
+          throw new Error(`No hay precio para ${variante.nombre} en esta lista`);
         }
+
+        const precioUnitario = precioData.precio;
+        const subtotalItem = precioUnitario * item.cantidad;
 
         subtotal += subtotalItem;
-      }
-
-      if (descuento < 0) {
-        throw new Error("El descuento general no puede ser negativo");
-      }
-
-      if (descuento > subtotal) {
-        throw new Error("El descuento general no puede ser mayor al subtotal");
-      }
-
-      const total = subtotal - descuento;
-
-      const nuevaVenta = await tx.venta.create({
-        data: {
-          clienteId,
-          subtotal,
-          descuento,
-          total,
-        },
-      });
-
-      for (const item of items) {
-        const descuentoItem = item.descuentoItem || 0;
-        const subtotalItem = item.cantidad * item.precioUnitario - descuentoItem;
 
         await tx.ventaDetalle.create({
           data: {
             ventaId: nuevaVenta.id,
             varianteId: item.varianteId,
             cantidad: item.cantidad,
-            precioUnitario: item.precioUnitario,
-            descuentoItem,
+            precioUnitario,
             subtotal: subtotalItem,
           },
         });
@@ -256,33 +238,38 @@ app.post("/ventas", async (req, res) => {
         });
       }
 
-      return await tx.venta.findUnique({
+      if (descuento > subtotal) {
+        throw new Error("Descuento mayor al subtotal");
+      }
+
+      const total = subtotal - descuento;
+
+      const ventaFinal = await tx.venta.update({
         where: { id: nuevaVenta.id },
+        data: {
+          subtotal,
+          total,
+        },
         include: {
-          cliente: true,
           detalles: {
             include: {
               variante: {
-                include: {
-                  producto: true,
-                },
+                include: { producto: true },
               },
             },
           },
         },
       });
+
+      return ventaFinal;
     });
 
     res.json(venta);
   } catch (error) {
     console.error(error);
-
-    return res.status(400).json({
-      error: error.message || "Error creando venta",
-    });
+    res.status(400).json({ error: error.message });
   }
 });
-
 // 👉 listar ventas
 app.get("/ventas", async (req, res) => {
   try {
