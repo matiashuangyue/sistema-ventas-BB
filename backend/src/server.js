@@ -163,9 +163,153 @@ app.get("/precios-variantes", async (req, res) => {
   }
 });
 
+// 👉 crear venta
+app.post("/ventas", async (req, res) => {
+  try {
+    const { clienteId = null, descuento = 0, items } = req.body;
 
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "La venta debe incluir al menos un item" });
+    }
 
+    const venta = await prisma.$transaction(async (tx) => {
+      let subtotal = 0;
 
+      for (const item of items) {
+        if (!item.varianteId || !item.cantidad || !item.precioUnitario) {
+          throw new Error("Hay items incompletos en la venta");
+        }
+
+        if (item.cantidad <= 0) {
+          throw new Error("La cantidad debe ser mayor a 0");
+        }
+
+        if (item.precioUnitario < 0) {
+          throw new Error("El precio unitario no puede ser negativo");
+        }
+
+        const variante = await tx.variante.findUnique({
+          where: { id: item.varianteId },
+        });
+
+        if (!variante) {
+          throw new Error(`La variante con ID ${item.varianteId} no existe`);
+        }
+
+        if (variante.stock < item.cantidad) {
+          throw new Error(
+            `Stock insuficiente para ${variante.nombre}. Stock actual: ${variante.stock}`
+          );
+        }
+
+        const descuentoItem = item.descuentoItem || 0;
+        const subtotalItem = item.cantidad * item.precioUnitario - descuentoItem;
+
+        if (subtotalItem < 0) {
+          throw new Error(`El subtotal del item ${variante.nombre} no puede ser negativo`);
+        }
+
+        subtotal += subtotalItem;
+      }
+
+      if (descuento < 0) {
+        throw new Error("El descuento general no puede ser negativo");
+      }
+
+      if (descuento > subtotal) {
+        throw new Error("El descuento general no puede ser mayor al subtotal");
+      }
+
+      const total = subtotal - descuento;
+
+      const nuevaVenta = await tx.venta.create({
+        data: {
+          clienteId,
+          subtotal,
+          descuento,
+          total,
+        },
+      });
+
+      for (const item of items) {
+        const descuentoItem = item.descuentoItem || 0;
+        const subtotalItem = item.cantidad * item.precioUnitario - descuentoItem;
+
+        await tx.ventaDetalle.create({
+          data: {
+            ventaId: nuevaVenta.id,
+            varianteId: item.varianteId,
+            cantidad: item.cantidad,
+            precioUnitario: item.precioUnitario,
+            descuentoItem,
+            subtotal: subtotalItem,
+          },
+        });
+
+        await tx.variante.update({
+          where: { id: item.varianteId },
+          data: {
+            stock: {
+              decrement: item.cantidad,
+            },
+          },
+        });
+      }
+
+      return await tx.venta.findUnique({
+        where: { id: nuevaVenta.id },
+        include: {
+          cliente: true,
+          detalles: {
+            include: {
+              variante: {
+                include: {
+                  producto: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    res.json(venta);
+  } catch (error) {
+    console.error(error);
+
+    return res.status(400).json({
+      error: error.message || "Error creando venta",
+    });
+  }
+});
+
+// 👉 listar ventas
+app.get("/ventas", async (req, res) => {
+  try {
+    const ventas = await prisma.venta.findMany({
+      orderBy: {
+        id: "desc",
+      },
+      include: {
+        cliente: true,
+        detalles: {
+          include: {
+            variante: {
+              include: {
+                producto: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    res.json(ventas);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error obteniendo ventas" });
+  }
+});
 
 
 
