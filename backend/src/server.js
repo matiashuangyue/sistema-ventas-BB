@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const prisma = require("./lib/prisma");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 
@@ -297,6 +299,136 @@ app.get("/ventas", async (req, res) => {
     res.status(500).json({ error: "Error obteniendo ventas" });
   }
 });
+
+// 👉 registrar usuario
+app.post("/auth/register", async (req, res) => {
+  try {
+    const { nombre, username, password, rol } = req.body;
+
+    if (!nombre || !username || !password) {
+      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
+
+    const existe = await prisma.usuario.findUnique({
+      where: { username },
+    });
+
+    if (existe) {
+      return res.status(400).json({ error: "El usuario ya existe" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const usuario = await prisma.usuario.create({
+      data: {
+        nombre,
+        username,
+        password: passwordHash,
+        rol: rol || "admin",
+      },
+    });
+
+    res.json({
+      id: usuario.id,
+      nombre: usuario.nombre,
+      username: usuario.username,
+      rol: usuario.rol,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error registrando usuario" });
+  }
+});
+
+// 👉 login
+app.post("/auth/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { username },
+    });
+
+    if (!usuario) {
+      return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
+    }
+
+    if (!usuario.activo) {
+      return res.status(403).json({ error: "Usuario inactivo" });
+    }
+
+    const passwordOk = await bcrypt.compare(password, usuario.password);
+
+    if (!passwordOk) {
+      return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
+    }
+
+    const token = jwt.sign(
+      {
+        id: usuario.id,
+        username: usuario.username,
+        rol: usuario.rol,
+      },
+      "secreto_super_seguro",
+      { expiresIn: "8h" }
+    );
+
+    res.json({
+      token,
+      usuario: {
+        id: usuario.id,
+        nombre: usuario.nombre,
+        username: usuario.username,
+        rol: usuario.rol,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error en login" });
+  }
+});
+
+function authMiddleware(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+      return res.status(401).json({ error: "Token no proporcionado" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    if (!token) {
+      return res.status(401).json({ error: "Token inválido" });
+    }
+
+    const decoded = jwt.verify(token, "secreto_super_seguro");
+
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: "No autorizado" });
+  }
+}
+
+app.get("/auth/me", authMiddleware, async (req, res) => {
+  res.json({
+    mensaje: "Usuario autenticado",
+    user: req.user,
+  });
+});
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
