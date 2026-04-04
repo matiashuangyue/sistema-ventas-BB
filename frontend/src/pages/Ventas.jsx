@@ -13,10 +13,36 @@ export default function Ventas() {
   const [descuento, setDescuento] = useState(0);
   const [cantidadesBusqueda, setCantidadesBusqueda] = useState({});
   const [clienteBusqueda, setClienteBusqueda] = useState("");
+  const [clientesEncontrados, setClientesEncontrados] = useState([]);
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
+  
 
   useEffect(() => {
     cargarVariantes();
   }, []);
+
+  useEffect(() => {
+  const texto = clienteBusqueda.trim();
+
+  if (!texto) {
+    setClientesEncontrados([]);
+    return;
+  }
+
+  const timeout = setTimeout(async () => {
+    try {
+      const res = await fetch(
+        `${API}/clientes/buscar?q=${encodeURIComponent(texto)}`
+      );
+      const data = await res.json();
+      setClientesEncontrados(data);
+    } catch (error) {
+      console.error(error);
+    }
+  }, 300);
+
+  return () => clearTimeout(timeout);
+}, [clienteBusqueda]);
 
   async function cargarVariantes() {
     const data = await fetch(`${API}/variantes`).then((r) => r.json());
@@ -206,12 +232,12 @@ export default function Ventas() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          clienteId: null,
-          descuento,
-          items: carrito.map((item) => ({
+            clienteId: clienteSeleccionado?.id || null,
+            descuento,
+            items: carrito.map((item) => ({
             varianteId: item.varianteId,
             cantidad: Number(item.cantidad),
-          })),
+         })),
         }),
       });
 
@@ -225,6 +251,9 @@ export default function Ventas() {
 
       setCarrito([]);
       setDescuento(0);
+      setClienteSeleccionado(null);
+      setClienteBusqueda("");
+      setClientesEncontrados([]);
       await cargarVariantes();
 
       buscadorRef.current?.focus();
@@ -238,14 +267,67 @@ export default function Ventas() {
       <h2 style={styles.title}>Ventas</h2>
 
       <div style={styles.bloque}>
-        <label style={styles.label}>Cliente (opcional)</label>
-        <input
-          style={styles.input}
-          placeholder="Buscar cliente..."
-          value={clienteBusqueda}
-          onChange={(e) => setClienteBusqueda(e.target.value)}
-        />
+  <label style={styles.label}>Cliente (opcional)</label>
+
+  <input
+    style={styles.input}
+    placeholder="Buscar cliente..."
+    value={clienteBusqueda}
+    onChange={(e) => {
+      setClienteBusqueda(e.target.value);
+      setClienteSeleccionado(null);
+    }}
+  />
+
+  {clienteSeleccionado ? (
+    <div style={styles.clienteSeleccionadoBox}>
+      <div>
+        <strong>{clienteSeleccionado.nombre}</strong>
+        {clienteSeleccionado.telefono && (
+          <div style={styles.clienteExtra}>{clienteSeleccionado.telefono}</div>
+        )}
       </div>
+
+      <button
+        style={styles.btnQuitarCliente}
+        onClick={() => {
+          setClienteSeleccionado(null);
+          setClienteBusqueda("");
+          setClientesEncontrados([]);
+        }}
+      >
+        Quitar
+      </button>
+    </div>
+  ) : (
+    clientesEncontrados.length > 0 && (
+      <div style={styles.clientesDropdown}>
+        {clientesEncontrados.map((cliente) => (
+          <div
+            key={cliente.id}
+            style={styles.clienteItem}
+            onClick={() => {
+              setClienteSeleccionado(cliente);
+              setClienteBusqueda(cliente.nombre);
+              setClientesEncontrados([]);
+            }}
+          >
+            <div style={styles.clienteNombre}>{cliente.nombre}</div>
+            <div style={styles.clienteExtra}>
+              {cliente.telefono || cliente.localidad || cliente.cuit || ""}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  )}
+
+  {!clienteSeleccionado && (
+    <div style={styles.clienteFallback}>
+      Si no seleccionás un cliente, la venta se registra como <strong>Consumidor Final</strong>.
+    </div>
+  )}
+</div>
 
       <div style={styles.bloque}>
         <label style={styles.label}>Buscar producto o variante</label>
@@ -653,5 +735,56 @@ btnAgregar: {
   height: 34,
   fontSize: 18,
   fontWeight: 700,
+},
+clienteSeleccionadoBox: {
+  marginTop: 10,
+  padding: 10,
+  border: "1px solid #d1fae5",
+  background: "#ecfdf5",
+  borderRadius: 10,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+},
+
+btnQuitarCliente: {
+  border: "none",
+  background: "#dc2626",
+  color: "#fff",
+  padding: "8px 10px",
+  borderRadius: 8,
+  fontSize: 12,
+},
+
+clientesDropdown: {
+  marginTop: 8,
+  border: "1px solid #e5e7eb",
+  borderRadius: 10,
+  overflow: "hidden",
+  background: "#fff",
+},
+
+clienteItem: {
+  padding: 10,
+  borderBottom: "1px solid #f3f4f6",
+  cursor: "pointer",
+},
+
+clienteNombre: {
+  fontWeight: 600,
+  fontSize: 14,
+},
+
+clienteExtra: {
+  fontSize: 12,
+  color: "#6b7280",
+  marginTop: 2,
+},
+
+clienteFallback: {
+  marginTop: 8,
+  fontSize: 12,
+  color: "#6b7280",
 },
 };

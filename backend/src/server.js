@@ -586,7 +586,79 @@ app.put("/precios-variantes/:id", async (req, res) => {
   }
 });
 
+// 👉 crear cliente
+app.post("/clientes", async (req, res) => {
+  try {
+    const { nombre, telefono, direccion, localidad, cuit, observaciones } = req.body;
 
+    if (!nombre) {
+      return res.status(400).json({ error: "El nombre es obligatorio" });
+    }
+
+    const cliente = await prisma.cliente.create({
+      data: {
+        nombre,
+        telefono,
+        direccion,
+        localidad,
+        cuit,
+        observaciones,
+      },
+    });
+
+    res.json(cliente);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error creando cliente" });
+  }
+});
+
+// 👉 listar clientes
+app.get("/clientes", async (req, res) => {
+  try {
+    const clientes = await prisma.cliente.findMany({
+      orderBy: {
+        nombre: "asc",
+      },
+    });
+
+    res.json(clientes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error obteniendo clientes" });
+  }
+});
+
+// 👉 buscar clientes
+app.get("/clientes/buscar", async (req, res) => {
+  try {
+    const q = (req.query.q || "").trim();
+
+    if (!q) {
+      return res.json([]);
+    }
+
+    const clientes = await prisma.cliente.findMany({
+      where: {
+        OR: [
+          { nombre: { contains: q } },
+          { telefono: { contains: q } },
+          { localidad: { contains: q } },
+          { cuit: { contains: q } },
+        ],
+      },
+      orderBy: {
+        nombre: "asc",
+      },
+      take: 10,
+    });
+
+    res.json(clientes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error buscando clientes" });
+  }
+});
 
 
 
