@@ -250,31 +250,6 @@ app.get("/listas-precio", async (req, res) => {
   }
 });
 
-// 👉 crear precio por tramo/cantidad mínima
-app.post("/precios-variantes", async (req, res) => {
-  try {
-    const { varianteId, listaPrecioId, precio, cantidadMinima } = req.body;
-
-    if (!varianteId || !listaPrecioId || precio == null || cantidadMinima == null) {
-      return res.status(400).json({ error: "Faltan datos obligatorios" });
-    }
-
-    const precioVariante = await prisma.precioVariante.create({
-      data: {
-        varianteId,
-        listaPrecioId,
-        precio,
-        cantidadMinima,
-      },
-    });
-
-    res.json(precioVariante);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error creando precio para variante" });
-  }
-});
-
 // 👉 listar precios por variante
 app.get("/precios-variantes", async (req, res) => {
   try {
@@ -535,6 +510,31 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
+async function inicializarListasPrecio() {
+  try {
+    const listas = ["Lista 1", "Lista 2", "Lista 3"];
+
+    for (const nombre of listas) {
+      const existente = await prisma.listaPrecio.findFirst({
+        where: { nombre },
+      });
+
+      if (!existente) {
+        await prisma.listaPrecio.create({
+          data: {
+            nombre,
+            activa: true,
+          },
+        });
+      }
+    }
+
+    console.log("✅ Listas de precio inicializadas");
+  } catch (error) {
+    console.error("❌ Error inicializando listas:", error);
+  }
+}
+
 function authMiddleware(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
@@ -712,7 +712,7 @@ app.put("/precios-variantes/:id", async (req, res) => {
 // 👉 crear cliente
 app.post("/clientes", async (req, res) => {
   try {
-    const { nombre, telefono, direccion, localidad, cuit, observaciones } = req.body;
+    const { nombre, email, telefono, direccion, localidad, cuit, observaciones } = req.body;
 
     if (!nombre) {
       return res.status(400).json({ error: "El nombre es obligatorio" });
@@ -721,6 +721,7 @@ app.post("/clientes", async (req, res) => {
     const cliente = await prisma.cliente.create({
       data: {
         nombre,
+        email, // 👈 Agregado
         telefono,
         direccion,
         localidad,
@@ -732,7 +733,7 @@ app.post("/clientes", async (req, res) => {
     res.json(cliente);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Error creando cliente" });
+    res.status(500).json({ error: "Error creando cliente. Tal vez el email ya existe." });
   }
 });
 
@@ -765,6 +766,7 @@ app.get("/clientes/buscar", async (req, res) => {
       where: {
         OR: [
           { nombre: { contains: q } },
+          { email: { contains: q } },
           { telefono: { contains: q } },
           { localidad: { contains: q } },
           { cuit: { contains: q } },
@@ -786,7 +788,7 @@ app.get("/clientes/buscar", async (req, res) => {
 app.put("/clientes/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, telefono, direccion, localidad, cuit, observaciones } = req.body;
+    const { nombre, email, telefono, direccion, localidad, cuit, observaciones } = req.body;
 
     if (!nombre) {
       return res.status(400).json({ error: "El nombre es obligatorio" });
@@ -796,6 +798,7 @@ app.put("/clientes/:id", async (req, res) => {
       where: { id: Number(id) },
       data: {
         nombre,
+        email, // 👈 Agregado
         telefono,
         direccion,
         localidad,
@@ -810,7 +813,6 @@ app.put("/clientes/:id", async (req, res) => {
     res.status(500).json({ error: "Error actualizando cliente" });
   }
 });
-
 
 app.delete("/precios-variantes/:id", async (req, res) => {
   try {
@@ -1078,6 +1080,7 @@ app.get("/reportes/dashboard", async (req, res) => {
 
 const PORT = 8080;
 
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, "0.0.0.0", async () => {
   console.log(`API lista en http://localhost:${PORT}`);
+  await inicializarListasPrecio();
 });

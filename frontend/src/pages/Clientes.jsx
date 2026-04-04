@@ -12,6 +12,7 @@ export default function Clientes() {
   const [clienteEditar, setClienteEditar] = useState(null);
 
   const [nombre, setNombre] = useState("");
+  const [email, setEmail] = useState(""); // 👈 Nuevo estado para Email
   const [telefono, setTelefono] = useState("");
   const [direccion, setDireccion] = useState("");
   const [localidad, setLocalidad] = useState("");
@@ -26,11 +27,7 @@ export default function Clientes() {
     try {
       const res = await fetch(`${API}/clientes`);
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Error cargando clientes");
-      }
-
+      if (!res.ok) throw new Error(data.error || "Error cargando clientes");
       setClientes(data);
     } catch (error) {
       console.error(error);
@@ -40,24 +37,24 @@ export default function Clientes() {
 
   const clientesFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
-
     if (!texto) return clientes;
 
     return clientes.filter((cliente) => {
       const combinado = `
         ${cliente.nombre || ""}
+        ${cliente.email || ""}
         ${cliente.telefono || ""}
         ${cliente.direccion || ""}
         ${cliente.localidad || ""}
         ${cliente.cuit || ""}
       `.toLowerCase();
-
       return combinado.includes(texto);
     });
   }, [clientes, busqueda]);
 
   function limpiarFormulario() {
     setNombre("");
+    setEmail(""); // 👈 Limpiar email
     setTelefono("");
     setDireccion("");
     setLocalidad("");
@@ -78,6 +75,7 @@ export default function Clientes() {
   function abrirModalEditar(cliente) {
     setClienteEditar(cliente);
     setNombre(cliente.nombre || "");
+    setEmail(cliente.email || ""); // 👈 Cargar email al editar
     setTelefono(cliente.telefono || "");
     setDireccion(cliente.direccion || "");
     setLocalidad(cliente.localidad || "");
@@ -93,19 +91,15 @@ export default function Clientes() {
   }
 
   async function guardarNuevoCliente() {
-    if (!nombre.trim()) {
-      alert("El nombre es obligatorio");
-      return;
-    }
+    if (!nombre.trim()) return alert("El nombre es obligatorio");
 
     try {
       const res = await fetch(`${API}/clientes`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nombre: nombre.trim(),
+          email: email.trim(), // 👈 Enviar email
           telefono: telefono.trim(),
           direccion: direccion.trim(),
           localidad: localidad.trim(),
@@ -115,35 +109,25 @@ export default function Clientes() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Error creando cliente");
-      }
+      if (!res.ok) throw new Error(data.error || "Error creando cliente");
 
       await cargarClientes();
       cerrarModalNuevo();
     } catch (error) {
-      console.error(error);
       alert(error.message);
     }
   }
 
   async function guardarEdicionCliente() {
-    if (!clienteEditar) return;
-
-    if (!nombre.trim()) {
-      alert("El nombre es obligatorio");
-      return;
-    }
+    if (!clienteEditar || !nombre.trim()) return alert("Nombre obligatorio");
 
     try {
       const res = await fetch(`${API}/clientes/${clienteEditar.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nombre: nombre.trim(),
+          email: email.trim(), // 👈 Actualizar email
           telefono: telefono.trim(),
           direccion: direccion.trim(),
           localidad: localidad.trim(),
@@ -152,16 +136,11 @@ export default function Clientes() {
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Error editando cliente");
-      }
+      if (!res.ok) throw new Error("Error editando cliente");
 
       await cargarClientes();
       cerrarModalEditar();
     } catch (error) {
-      console.error(error);
       alert(error.message);
     }
   }
@@ -170,186 +149,57 @@ export default function Clientes() {
     <div style={styles.container}>
       <div style={styles.header}>
         <h2 style={styles.title}>Clientes</h2>
-
-        <button style={styles.btnNuevo} onClick={abrirModalNuevo}>
-          + Nuevo cliente
-        </button>
+        <button style={styles.btnNuevo} onClick={abrirModalNuevo}>+ Nuevo</button>
       </div>
 
       <div style={styles.bloque}>
-        <label style={styles.label}>Buscar cliente</label>
         <input
           style={styles.input}
-          placeholder="Buscar por nombre, teléfono, dirección o CUIT..."
+          placeholder="Buscar por nombre, mail, CUIT..."
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
       </div>
 
       <div style={styles.lista}>
-        {clientesFiltrados.length === 0 && (
-          <div style={styles.empty}>No se encontraron clientes.</div>
-        )}
-
         {clientesFiltrados.map((cliente) => (
           <div key={cliente.id} style={styles.card}>
             <div style={styles.linea1}>
               <div style={styles.nombre}>{cliente.nombre}</div>
-
-              <button
-                style={styles.btnEditar}
-                onClick={() => abrirModalEditar(cliente)}
-              >
-                Editar
-              </button>
+              <button style={styles.btnEditar} onClick={() => abrirModalEditar(cliente)}>Editar</button>
             </div>
 
-            <div style={styles.linea2}>
-              <div style={styles.dato}>
-                <strong>Tel:</strong> {cliente.telefono || "-"}
-              </div>
-              <div style={styles.dato}>
-                <strong>CUIT:</strong> {cliente.cuit || "-"}
-              </div>
-            </div>
-
-            <div style={styles.linea2}>
-              <div style={styles.dato}>
-                <strong>Dirección:</strong> {cliente.direccion || "-"}
-              </div>
-              <div style={styles.dato}>
-                <strong>Localidad:</strong> {cliente.localidad || "-"}
-              </div>
+            <div style={styles.datosGrid}>
+              <div style={styles.dato}><strong>Email:</strong> {cliente.email || "-"}</div>
+              <div style={styles.dato}><strong>Tel:</strong> {cliente.telefono || "-"}</div>
+              <div style={styles.dato}><strong>CUIT:</strong> {cliente.cuit || "-"}</div>
+              <div style={styles.dato}><strong>Ubicación:</strong> {cliente.direccion} ({cliente.localidad})</div>
             </div>
 
             {cliente.observaciones && (
-              <div style={styles.observaciones}>
-                <strong>Obs:</strong> {cliente.observaciones}
-              </div>
+              <div style={styles.observaciones}><strong>Obs:</strong> {cliente.observaciones}</div>
             )}
           </div>
         ))}
       </div>
 
-      {modalNuevoOpen && (
+      {/* MODAL (Nuevo / Editar) */}
+      {(modalNuevoOpen || modalEditarOpen) && (
         <>
-          <div style={styles.overlay} onClick={cerrarModalNuevo}></div>
-
+          <div style={styles.overlay} onClick={modalNuevoOpen ? cerrarModalNuevo : cerrarModalEditar}></div>
           <div style={styles.modal}>
-            <h3 style={styles.modalTitle}>Nuevo cliente</h3>
-
-            <input
-              style={styles.input}
-              placeholder="Nombre"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="Teléfono"
-              value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="Dirección"
-              value={direccion}
-              onChange={(e) => setDireccion(e.target.value)}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="Localidad"
-              value={localidad}
-              onChange={(e) => setLocalidad(e.target.value)}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="CUIT"
-              value={cuit}
-              onChange={(e) => setCuit(e.target.value)}
-            />
-
-            <textarea
-              style={styles.textarea}
-              placeholder="Observaciones"
-              value={observaciones}
-              onChange={(e) => setObservaciones(e.target.value)}
-            />
-
+            <h3 style={styles.modalTitle}>{modalNuevoOpen ? "Nuevo Cliente" : "Editar Cliente"}</h3>
+            <input style={styles.input} placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} />
+            <input style={styles.input} placeholder="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+            <input style={styles.input} placeholder="Teléfono" value={telefono} onChange={e => setTelefono(e.target.value)} />
+            <input style={styles.input} placeholder="CUIT" value={cuit} onChange={e => setCuit(e.target.value)} />
+            <input style={styles.input} placeholder="Dirección" value={direccion} onChange={e => setDireccion(e.target.value)} />
+            <input style={styles.input} placeholder="Localidad" value={localidad} onChange={e => setLocalidad(e.target.value)} />
+            <textarea style={styles.textarea} placeholder="Observaciones" value={observaciones} onChange={e => setObservaciones(e.target.value)} />
+            
             <div style={styles.modalActions}>
-              <button style={styles.btnSecundario} onClick={cerrarModalNuevo}>
-                Cancelar
-              </button>
-
-              <button style={styles.btnNuevo} onClick={guardarNuevoCliente}>
-                Guardar
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {modalEditarOpen && clienteEditar && (
-        <>
-          <div style={styles.overlay} onClick={cerrarModalEditar}></div>
-
-          <div style={styles.modal}>
-            <h3 style={styles.modalTitle}>Editar cliente</h3>
-
-            <input
-              style={styles.input}
-              placeholder="Nombre"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="Teléfono"
-              value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="Dirección"
-              value={direccion}
-              onChange={(e) => setDireccion(e.target.value)}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="Localidad"
-              value={localidad}
-              onChange={(e) => setLocalidad(e.target.value)}
-            />
-
-            <input
-              style={styles.input}
-              placeholder="CUIT"
-              value={cuit}
-              onChange={(e) => setCuit(e.target.value)}
-            />
-
-            <textarea
-              style={styles.textarea}
-              placeholder="Observaciones"
-              value={observaciones}
-              onChange={(e) => setObservaciones(e.target.value)}
-            />
-
-            <div style={styles.modalActions}>
-              <button style={styles.btnSecundario} onClick={cerrarModalEditar}>
-                Cancelar
-              </button>
-
-              <button style={styles.btnNuevo} onClick={guardarEdicionCliente}>
-                Guardar cambios
-              </button>
+              <button style={styles.btnSecundario} onClick={modalNuevoOpen ? cerrarModalNuevo : cerrarModalEditar}>Cancelar</button>
+              <button style={styles.btnNuevo} onClick={modalNuevoOpen ? guardarNuevoCliente : guardarEdicionCliente}>Guardar</button>
             </div>
           </div>
         </>
@@ -359,150 +209,24 @@ export default function Clientes() {
 }
 
 const styles = {
-  container: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 16,
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-  },
-  title: {
-    margin: 0,
-  },
-  bloque: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: 12,
-    padding: 14,
-  },
-  label: {
-    display: "block",
-    fontSize: 14,
-    marginBottom: 6,
-    color: "#374151",
-  },
-  input: {
-    width: "100%",
-    padding: 10,
-    borderRadius: 10,
-    border: "1px solid #d1d5db",
-    fontSize: 15,
-    boxSizing: "border-box",
-  },
-  textarea: {
-    width: "100%",
-    minHeight: 90,
-    padding: 10,
-    borderRadius: 10,
-    border: "1px solid #d1d5db",
-    fontSize: 15,
-    boxSizing: "border-box",
-    resize: "vertical",
-  },
-  lista: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  },
-  empty: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: 12,
-    padding: 14,
-    color: "#6b7280",
-  },
-  card: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: 12,
-    padding: 14,
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-  },
-  linea1: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-  },
-  nombre: {
-    fontWeight: 700,
-    fontSize: 16,
-  },
-  linea2: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-    fontSize: 14,
-    color: "#374151",
-  },
-  dato: {
-    lineHeight: 1.3,
-  },
-  observaciones: {
-    fontSize: 13,
-    color: "#4b5563",
-    borderTop: "1px solid #f3f4f6",
-    paddingTop: 8,
-  },
-  btnNuevo: {
-    border: "none",
-    borderRadius: 10,
-    background: "#2563eb",
-    color: "#fff",
-    padding: "10px 14px",
-    fontWeight: 600,
-  },
-  btnEditar: {
-    border: "1px solid #d1d5db",
-    borderRadius: 10,
-    background: "#fff",
-    color: "#111827",
-    padding: "8px 12px",
-    fontWeight: 600,
-  },
-  btnSecundario: {
-    border: "1px solid #d1d5db",
-    borderRadius: 10,
-    background: "#fff",
-    color: "#111827",
-    padding: "10px 14px",
-    fontWeight: 600,
-  },
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.35)",
-    zIndex: 999,
-  },
-  modal: {
-    position: "fixed",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    width: "92%",
-    maxWidth: 500,
-    background: "#fff",
-    borderRadius: 14,
-    padding: 18,
-    zIndex: 1000,
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    maxHeight: "85vh",
-    overflowY: "auto",
-  },
-  modalTitle: {
-    margin: 0,
-  },
-  modalActions: {
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: 8,
-  },
+  container: { display: "flex", flexDirection: "column", gap: 16 },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  title: { margin: 0, fontSize: 20 },
+  bloque: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 },
+  input: { width: "100%", padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 15, boxSizing: "border-box" },
+  textarea: { width: "100%", minHeight: 80, padding: 10, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 15, boxSizing: "border-box", resize: "none" },
+  lista: { display: "flex", flexDirection: "column", gap: 10 },
+  card: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 8 },
+  linea1: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  nombre: { fontWeight: 700, fontSize: 16, color: "#111827" },
+  datosGrid: { display: "flex", flexDirection: "column", gap: 4, fontSize: 13, color: "#4b5563" },
+  dato: { lineHeight: "1.4" },
+  observaciones: { fontSize: 12, color: "#6b7280", borderTop: "1px solid #f3f4f6", paddingTop: 8, marginTop: 4 },
+  btnNuevo: { border: "none", borderRadius: 10, background: "#2563eb", color: "#fff", padding: "10px 16px", fontWeight: 600, cursor: "pointer" },
+  btnEditar: { border: "1px solid #d1d5db", borderRadius: 8, background: "#fff", color: "#374151", padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  btnSecundario: { border: "1px solid #d1d5db", borderRadius: 10, background: "#fff", padding: "10px 16px", fontWeight: 600, cursor: "pointer" },
+  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 999 },
+  modal: { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "90%", maxWidth: 450, background: "#fff", borderRadius: 16, padding: 20, zIndex: 1000, display: "flex", flexDirection: "column", gap: 12, maxHeight: "90vh", overflowY: "auto" },
+  modalTitle: { margin: "0 0 8px 0", fontSize: 18 },
+  modalActions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 },
 };

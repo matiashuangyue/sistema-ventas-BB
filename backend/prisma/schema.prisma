@@ -10,6 +10,7 @@ model Usuario {
   id        Int      @id @default(autoincrement())
   nombre    String
   username  String   @unique
+  email     String?   @unique
   password  String
   rol       String
   activo    Boolean  @default(true)
@@ -19,6 +20,7 @@ model Usuario {
 model Cliente {
   id            Int      @id @default(autoincrement())
   nombre        String
+  email         String?  @unique
   telefono      String?
   direccion     String?
   localidad     String?

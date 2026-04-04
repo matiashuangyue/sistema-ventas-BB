@@ -3,6 +3,7 @@ CREATE TABLE "Usuario" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "nombre" TEXT NOT NULL,
     "username" TEXT NOT NULL,
+    "email" TEXT,
     "password" TEXT NOT NULL,
     "rol" TEXT NOT NULL,
     "activo" BOOLEAN NOT NULL DEFAULT true,
@@ -13,6 +14,7 @@ CREATE TABLE "Usuario" (
 CREATE TABLE "Cliente" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "nombre" TEXT NOT NULL,
+    "email" TEXT,
     "telefono" TEXT,
     "direccion" TEXT,
     "localidad" TEXT,
@@ -52,6 +54,7 @@ CREATE TABLE "ListaPrecio" (
 CREATE TABLE "PrecioVariante" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "precio" REAL NOT NULL,
+    "cantidadMinima" INTEGER,
     "varianteId" INTEGER NOT NULL,
     "listaPrecioId" INTEGER NOT NULL,
     CONSTRAINT "PrecioVariante_varianteId_fkey" FOREIGN KEY ("varianteId") REFERENCES "Variante" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -83,5 +86,33 @@ CREATE TABLE "VentaDetalle" (
     CONSTRAINT "VentaDetalle_varianteId_fkey" FOREIGN KEY ("varianteId") REFERENCES "Variante" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
+-- CreateTable
+CREATE TABLE "Compra" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "proveedor" TEXT,
+    "fecha" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "total" REAL NOT NULL,
+    "observaciones" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- CreateTable
+CREATE TABLE "CompraDetalle" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "compraId" INTEGER NOT NULL,
+    "varianteId" INTEGER NOT NULL,
+    "cantidad" INTEGER NOT NULL,
+    "costoUnitario" REAL NOT NULL,
+    "subtotal" REAL NOT NULL,
+    CONSTRAINT "CompraDetalle_compraId_fkey" FOREIGN KEY ("compraId") REFERENCES "Compra" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "CompraDetalle_varianteId_fkey" FOREIGN KEY ("varianteId") REFERENCES "Variante" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Usuario_username_key" ON "Usuario"("username");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Usuario_email_key" ON "Usuario"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Cliente_email_key" ON "Cliente"("email");
