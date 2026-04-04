@@ -5,6 +5,7 @@ import { getToken } from "./services/auth";
 
 import Ventas from "./pages/Ventas";
 import Compras from "./pages/Compras";
+import HistorialVentas from "./pages/HistorialVentas";
 import Productos from "./pages/Productos";
 import Clientes from "./pages/Clientes";
 import Reportes from "./pages/Reportes";
@@ -18,7 +19,7 @@ function App() {
       case "ventas":
         return <Ventas />;
       case "compras":
-        return <Compras />;
+        return <HistorialVentas />;
       case "productos":
         return <Productos />;
       case "clientes":

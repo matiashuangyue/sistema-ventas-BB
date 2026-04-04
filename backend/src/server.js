@@ -41,10 +41,14 @@ app.get("/productos", async (req, res) => {
       include: {
         variantes: true,
       },
+      orderBy: {
+        id: "desc",
+      },
     });
 
     res.json(productos);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Error obteniendo productos" });
   }
 });
@@ -84,6 +88,9 @@ app.get("/variantes", async (req, res) => {
           },
         },
       },
+      orderBy: {
+        id: "desc",
+      },
     });
 
     res.json(variantes);
@@ -92,7 +99,123 @@ app.get("/variantes", async (req, res) => {
     res.status(500).json({ error: "Error obteniendo variantes" });
   }
 });
+// 👉 actualizar stock de variante
+app.put("/variantes/:id/stock", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { stock } = req.body;
 
+    if (stock == null || stock < 0) {
+      return res.status(400).json({ error: "Stock inválido" });
+    }
+
+    const variante = await prisma.variante.update({
+      where: { id: Number(id) },
+      data: { stock: Number(stock) },
+    });
+
+    res.json(variante);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error actualizando stock" });
+  }
+});
+// 👉 crear producto
+app.post("/productos", async (req, res) => {
+  try {
+    const { nombre, categoria } = req.body;
+
+    if (!nombre) {
+      return res.status(400).json({ error: "El nombre es obligatorio" });
+    }
+
+    const producto = await prisma.producto.create({
+      data: {
+        nombre,
+        categoria,
+      },
+    });
+
+    res.json(producto);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error creando producto" });
+  }
+});
+
+// 👉 publicar variantes
+app.post("/variantes", async (req, res) => {
+  try {
+    const { nombre, stock = 0, stockMinimo = 0, productoId } = req.body;
+
+    if (!nombre || !productoId) {
+      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
+
+    const variante = await prisma.variante.create({
+      data: {
+        nombre,
+        stock: Number(stock),
+        stockMinimo: Number(stockMinimo),
+        productoId: Number(productoId),
+      },
+    });
+
+    res.json(variante);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error creando variante" });
+  }
+});
+
+app.post("/precios-variantes", async (req, res) => {
+  try {
+    const { varianteId, listaPrecioId, precio, cantidadMinima } = req.body;
+
+    if (
+      !varianteId ||
+      !listaPrecioId ||
+      precio == null ||
+      cantidadMinima == null
+    ) {
+      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
+
+    const existente = await prisma.precioVariante.findFirst({
+      where: {
+        varianteId: Number(varianteId),
+        listaPrecioId: Number(listaPrecioId),
+        cantidadMinima: Number(cantidadMinima),
+      },
+    });
+
+    let precioVariante;
+
+    if (existente) {
+      precioVariante = await prisma.precioVariante.update({
+        where: { id: existente.id },
+        data: {
+          precio: Number(precio),
+        },
+      });
+    } else {
+      precioVariante = await prisma.precioVariante.create({
+        data: {
+          varianteId: Number(varianteId),
+          listaPrecioId: Number(listaPrecioId),
+          precio: Number(precio),
+          cantidadMinima: Number(cantidadMinima),
+        },
+      });
+    }
+
+    res.json(precioVariante);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error creando/actualizando precio" });
+  }
+});
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // 👉 crear lista de precio
 app.post("/listas-precio", async (req, res) => {
   try {
@@ -661,14 +784,191 @@ app.get("/clientes/buscar", async (req, res) => {
 });
 
 
+app.delete("/precios-variantes/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    await prisma.precioVariante.delete({
+      where: { id: Number(id) },
+    });
 
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error eliminando precio" });
+  }
+});
 
+app.put("/precios-variantes/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { cantidadMinima, precio } = req.body;
 
+    if (cantidadMinima == null || precio == null) {
+      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
 
+    const precioActual = await prisma.precioVariante.findUnique({
+      where: { id: Number(id) },
+    });
 
+    if (!precioActual) {
+      return res.status(404).json({ error: "Escala no encontrada" });
+    }
 
+    const existente = await prisma.precioVariante.findFirst({
+      where: {
+        varianteId: precioActual.varianteId,
+        listaPrecioId: precioActual.listaPrecioId,
+        cantidadMinima: Number(cantidadMinima),
+        NOT: {
+          id: Number(id),
+        },
+      },
+    });
 
+    if (existente) {
+      return res.status(400).json({
+        error: "Ya existe una escala con esa lista y cantidad mínima",
+      });
+    }
+
+    const actualizado = await prisma.precioVariante.update({
+      where: { id: Number(id) },
+      data: {
+        cantidadMinima: Number(cantidadMinima),
+        precio: Number(precio),
+      },
+    });
+
+    res.json(actualizado);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error actualizando precio" });
+  }
+});
+
+app.put("/variantes/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, stockMinimo, productoId } = req.body;
+
+    const actualizada = await prisma.variante.update({
+      where: { id: Number(id) },
+      data: {
+        nombre,
+        stockMinimo: stockMinimo != null ? Number(stockMinimo) : undefined,
+        productoId: productoId ? Number(productoId) : undefined,
+      },
+    });
+
+    res.json(actualizada);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error actualizando variante" });
+  }
+});
+
+app.get("/ventas/historial", async (req, res) => {
+  try {
+    const { desde, hasta, cliente } = req.query;
+
+    const where = {};
+
+    // filtro por fechas
+    if (desde || hasta) {
+      where.fecha = {};
+
+      if (desde) {
+        where.fecha.gte = new Date(`${desde}T00:00:00.000Z`);
+      }
+
+      if (hasta) {
+        where.fecha.lte = new Date(`${hasta}T23:59:59.999Z`);
+      }
+    }
+
+    // filtro por cliente
+    if (cliente && cliente.trim() !== "") {
+      where.cliente = {
+        nombre: {
+          contains: cliente.trim(),
+        },
+      };
+    }
+
+    const ventas = await prisma.venta.findMany({
+      where,
+      orderBy: {
+        fecha: "desc",
+      },
+      include: {
+        cliente: true,
+        detalles: {
+          include: {
+            variante: {
+              include: {
+                producto: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const resultado = ventas.map((venta) => ({
+      id: venta.id,
+      fecha: venta.fecha,
+      cliente: venta.cliente ? venta.cliente.nombre : "Consumidor Final",
+      subtotal: venta.subtotal,
+      descuento: venta.descuento,
+      total: venta.total,
+      cantidadItems: venta.detalles.length,
+      unidadesTotales: venta.detalles.reduce(
+        (acc, item) => acc + item.cantidad,
+        0
+      ),
+    }));
+
+    res.json(resultado);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error obteniendo historial de ventas" });
+  }
+});
+
+app.get("/ventas/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const venta = await prisma.venta.findUnique({
+      where: {
+        id: Number(id),
+      },
+      include: {
+        cliente: true,
+        detalles: {
+          include: {
+            variante: {
+              include: {
+                producto: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!venta) {
+      return res.status(404).json({ error: "Venta no encontrada" });
+    }
+
+    res.json(venta);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error obteniendo detalle de venta" });
+  }
+});
 
 //////////////////////////////////////////////////////////////
 
