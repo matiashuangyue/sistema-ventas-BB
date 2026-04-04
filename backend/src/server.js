@@ -783,6 +783,34 @@ app.get("/clientes/buscar", async (req, res) => {
   }
 });
 
+app.put("/clientes/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, telefono, direccion, localidad, cuit, observaciones } = req.body;
+
+    if (!nombre) {
+      return res.status(400).json({ error: "El nombre es obligatorio" });
+    }
+
+    const cliente = await prisma.cliente.update({
+      where: { id: Number(id) },
+      data: {
+        nombre,
+        telefono,
+        direccion,
+        localidad,
+        cuit,
+        observaciones,
+      },
+    });
+
+    res.json(cliente);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error actualizando cliente" });
+  }
+});
+
 
 app.delete("/precios-variantes/:id", async (req, res) => {
   try {
@@ -969,6 +997,82 @@ app.get("/ventas/:id", async (req, res) => {
     res.status(500).json({ error: "Error obteniendo detalle de venta" });
   }
 });
+app.get("/reportes/dashboard", async (req, res) => {
+  try {
+    const { desde, hasta } = req.query;
+    const filtroFecha = {};
+
+    if (desde || hasta) {
+      filtroFecha.fecha = {};
+      if (desde) filtroFecha.fecha.gte = new Date(`${desde}T00:00:00.000Z`);
+      if (hasta) filtroFecha.fecha.lte = new Date(`${hasta}T23:59:59.999Z`);
+    }
+
+    // 1. Métricas del período
+    const stats = await prisma.venta.aggregate({
+      where: filtroFecha,
+      _sum: { total: true },
+      _count: { id: true }
+    });
+
+    // 2. Ranking de Clientes en el período
+    const clientesTopRaw = await prisma.venta.groupBy({
+      by: ['clienteId'],
+      where: filtroFecha,
+      _sum: { total: true },
+      orderBy: { _sum: { total: 'desc' } },
+      take: 5
+    });
+
+    const rankingClientes = await Promise.all(
+      clientesTopRaw.map(async (c) => {
+        const nombre = c.clienteId 
+          ? (await prisma.cliente.findUnique({ where: { id: c.clienteId } }))?.nombre 
+          : "Consumidor Final";
+        return { nombre: nombre || "Desconocido", total: c._sum.total };
+      })
+    );
+
+    // 3. Top Productos en el período
+    const topProdsRaw = await prisma.ventaDetalle.groupBy({
+      by: ['varianteId'],
+      where: { venta: filtroFecha },
+      _sum: { cantidad: true, subtotal: true },
+      orderBy: { _sum: { cantidad: 'desc' } },
+      take: 5
+    });
+
+    const topProductos = await Promise.all(
+      topProdsRaw.map(async (item) => {
+        const v = await prisma.variante.findUnique({
+          where: { id: item.varianteId },
+          include: { producto: true }
+        });
+        return { 
+          nombre: `${v?.producto?.nombre} ${v?.nombre}`, 
+          cantidad: item._sum.cantidad,
+          total: item._sum.subtotal
+        };
+      })
+    );
+
+    res.json({
+      resumen: {
+        total: stats._sum.total || 0,
+        cantidad: stats._count.id || 0,
+        promedio: stats._count.id > 0 ? (stats._sum.total / stats._count.id) : 0
+      },
+      rankingClientes,
+      topProductos
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Error en reportes" });
+  }
+});
+
+
+
+
 
 //////////////////////////////////////////////////////////////
 
