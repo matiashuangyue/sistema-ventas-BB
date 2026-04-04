@@ -79,6 +79,9 @@ app.get("/variantes", async (req, res) => {
           include: {
             listaPrecio: true,
           },
+          orderBy: {
+            cantidadMinima: "asc",
+          },
         },
       },
     });
@@ -124,16 +127,21 @@ app.get("/listas-precio", async (req, res) => {
   }
 });
 
-// 👉 asignar precio a una variante según lista
+// 👉 crear precio por tramo/cantidad mínima
 app.post("/precios-variantes", async (req, res) => {
   try {
-    const { varianteId, listaPrecioId, precio } = req.body;
+    const { varianteId, listaPrecioId, precio, cantidadMinima } = req.body;
+
+    if (!varianteId || !listaPrecioId || precio == null || cantidadMinima == null) {
+      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
 
     const precioVariante = await prisma.precioVariante.create({
       data: {
         varianteId,
         listaPrecioId,
         precio,
+        cantidadMinima,
       },
     });
 
@@ -168,11 +176,7 @@ app.get("/precios-variantes", async (req, res) => {
 // 👉 crear venta
 app.post("/ventas", async (req, res) => {
   try {
-    const { clienteId = null, listaPrecioId, descuento = 0, items } = req.body;
-
-    if (!listaPrecioId) {
-      return res.status(400).json({ error: "Debe indicar una lista de precio" });
-    }
+    const { clienteId = null, descuento = 0, items } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "La venta debe incluir items" });
@@ -191,6 +195,14 @@ app.post("/ventas", async (req, res) => {
       });
 
       for (const item of items) {
+        if (!item.varianteId || !item.cantidad) {
+          throw new Error("Hay items incompletos");
+        }
+
+        if (item.cantidad <= 0) {
+          throw new Error("La cantidad debe ser mayor a 0");
+        }
+
         const variante = await tx.variante.findUnique({
           where: { id: item.varianteId },
         });
@@ -203,19 +215,28 @@ app.post("/ventas", async (req, res) => {
           throw new Error(`Stock insuficiente para ${variante.nombre}`);
         }
 
-        // 👉 buscar precio según lista
-        const precioData = await tx.precioVariante.findFirst({
+        // Buscar todos los precios de esa variante cuyo mínimo sea <= cantidad
+        const preciosDisponibles = await tx.precioVariante.findMany({
           where: {
             varianteId: item.varianteId,
-            listaPrecioId,
+            cantidadMinima: {
+              lte: item.cantidad,
+            },
+          },
+          include: {
+            listaPrecio: true,
+          },
+          orderBy: {
+            cantidadMinima: "desc",
           },
         });
 
-        if (!precioData) {
-          throw new Error(`No hay precio para ${variante.nombre} en esta lista`);
+        if (preciosDisponibles.length === 0) {
+          throw new Error(`No hay precio configurado para ${variante.nombre}`);
         }
 
-        const precioUnitario = precioData.precio;
+        const precioAplicado = preciosDisponibles[0];
+        const precioUnitario = precioAplicado.precio;
         const subtotalItem = precioUnitario * item.cantidad;
 
         subtotal += subtotalItem;
@@ -241,7 +262,7 @@ app.post("/ventas", async (req, res) => {
       }
 
       if (descuento > subtotal) {
-        throw new Error("Descuento mayor al subtotal");
+        throw new Error("El descuento no puede ser mayor al subtotal");
       }
 
       const total = subtotal - descuento;
@@ -253,10 +274,13 @@ app.post("/ventas", async (req, res) => {
           total,
         },
         include: {
+          cliente: true,
           detalles: {
             include: {
               variante: {
-                include: { producto: true },
+                include: {
+                  producto: true,
+                },
               },
             },
           },
@@ -269,7 +293,7 @@ app.post("/ventas", async (req, res) => {
     res.json(venta);
   } catch (error) {
     console.error(error);
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: error.message || "Error creando venta" });
   }
 });
 // 👉 listar ventas
@@ -539,7 +563,28 @@ app.get("/compras", authMiddleware, async (req, res) => {
 
 
 
+// 👉 actualizar precio de variante
+app.put("/precios-variantes/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { precio, cantidadMinima, listaPrecioId, varianteId } = req.body;
 
+    const actualizado = await prisma.precioVariante.update({
+      where: { id: Number(id) },
+      data: {
+        precio,
+        cantidadMinima,
+        listaPrecioId,
+        varianteId,
+      },
+    });
+
+    res.json(actualizado);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error actualizando precio" });
+  }
+});
 
 
 

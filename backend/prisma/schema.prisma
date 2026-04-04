@@ -62,10 +62,11 @@ model ListaPrecio {
 }
 
 model PrecioVariante {
-  id            Int     @id @default(autoincrement())
-  precio        Float
-  varianteId    Int
-  listaPrecioId Int
+  id             Int     @id @default(autoincrement())
+  precio         Float
+  cantidadMinima Int?
+  varianteId     Int
+  listaPrecioId  Int
 
   variante    Variante    @relation(fields: [varianteId], references: [id])
   listaPrecio ListaPrecio @relation(fields: [listaPrecioId], references: [id])
