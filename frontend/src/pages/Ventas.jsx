@@ -264,47 +264,51 @@ export default function Ventas() {
               const aplicadoPreview = obtenerPrecioAplicado(variante, cantidadPreview);
 
               return (
-                <div key={variante.id} style={styles.resultadoRow}>
-                  <div style={styles.resultadoNombre}>
-                    {variante.nombre}
-                  </div>
+                <div key={variante.id} style={styles.resultadoCard}>
+  <div style={styles.resultadoLinea1}>
+    <div style={styles.resultadoNombreCompleto}>
+      {variante.producto?.nombre} - {variante.nombre}
+    </div>
 
-                  <div style={styles.resultadoStock}>
-                    Stock {variante.stock}
-                  </div>
+    <div style={styles.resultadoStock}>
+      Stock: {variante.stock}
+    </div>
+  </div>
 
-                  <div style={styles.resultadoEscalas}>
-                    {variante.precios?.map((p) => (
-                      <span key={p.id}>
-                        {p.cantidadMinima}+ ${p.precio}{" "}
-                      </span>
-                    ))}
-                  </div>
+  <div style={styles.resultadoLinea2}>
+    <div style={styles.resultadoEscalas}>
+      {variante.precios?.map((p) => (
+        <span key={p.id} style={styles.escalaInline}>
+          {p.cantidadMinima}+ ${p.precio}
+        </span>
+      ))}
+    </div>
 
-                  <input
-                    type="number"
-                    min="1"
-                    style={styles.inputCantidadBusqueda}
-                    value={cantidadesBusqueda[variante.id] ?? 1}
-                    onChange={(e) =>
-                      handleCantidadBusquedaChange(variante.id, e.target.value)
-                    }
-                  />
+    <input
+      type="number"
+      min="1"
+      style={styles.inputCantidadBusqueda}
+      value={cantidadesBusqueda[variante.id] ?? 1}
+      onChange={(e) =>
+        handleCantidadBusquedaChange(variante.id, e.target.value)
+      }
+    />
 
-                  <div style={styles.resultadoPrecioAplicado}>
-                    {aplicadoPreview.cantidadMinima
-                      ? `${aplicadoPreview.cantidadMinima}+`
-                      : "-"}{" "}
-                    ${aplicadoPreview.precioUnitario}
-                  </div>
+    <div style={styles.resultadoPrecioAplicado}>
+      {aplicadoPreview.cantidadMinima
+        ? `${aplicadoPreview.cantidadMinima}+`
+        : "-"}{" "}
+      ${aplicadoPreview.precioUnitario}
+    </div>
 
-                  <button
-                    style={styles.btnAgregar}
-                    onClick={() => agregarAlCarrito(variante)}
-                  >
-                    +
-                  </button>
-                </div>
+    <button
+      style={styles.btnAgregar}
+      onClick={() => agregarAlCarrito(variante)}
+    >
+      +
+    </button>
+  </div>
+</div>
               );
             })}
           </div>
@@ -325,36 +329,42 @@ export default function Ventas() {
             aplicado.precioUnitario * Number(item.cantidad || 0);
 
           return (
-            <div key={item.varianteId} style={styles.carritoLinea}>
-              <div style={styles.carritoNombre}>{item.nombre}</div>
+            <div key={item.varianteId} style={styles.carritoCard}>
+  <div style={styles.carritoLinea1}>
+    <div style={styles.carritoNombreCompleto}>
+      {variante?.producto?.nombre} - {item.nombre}
+    </div>
 
-              <div style={styles.carritoEscala}>
-                {aplicado.cantidadMinima ? `${aplicado.cantidadMinima}+` : "-"}
-              </div>
+    <button
+      style={styles.btnDelete}
+      onClick={() => eliminarItem(item.varianteId)}
+      title="Eliminar"
+    >
+      🗑
+    </button>
+  </div>
 
-              <div style={styles.carritoPrecio}>${aplicado.precioUnitario}</div>
+  <div style={styles.carritoLinea2}>
+    <div style={styles.carritoEscala}>
+      {aplicado.cantidadMinima ? `${aplicado.cantidadMinima}+` : "-"}
+    </div>
 
-              <input
-                type="number"
-                min="1"
-                style={styles.carritoCantidad}
-                value={item.cantidad}
-                onChange={(e) =>
-                  cambiarCantidadCarrito(item.varianteId, e.target.value)
-                }
-                onBlur={normalizarCantidadesCarrito}
-              />
+    <div style={styles.carritoPrecio}>${aplicado.precioUnitario}</div>
 
-              <div style={styles.carritoSubtotal}>${subtotalItem}</div>
+    <input
+      type="number"
+      min="1"
+      style={styles.carritoCantidad}
+      value={item.cantidad}
+      onChange={(e) =>
+        cambiarCantidadCarrito(item.varianteId, e.target.value)
+      }
+      onBlur={normalizarCantidadesCarrito}
+    />
 
-              <button
-                style={styles.btnDelete}
-                onClick={() => eliminarItem(item.varianteId)}
-                title="Eliminar"
-              >
-                🗑
-              </button>
-            </div>
+    <div style={styles.carritoSubtotal}>${subtotalItem}</div>
+  </div>
+</div>
           );
         })}
       </div>
@@ -478,46 +488,69 @@ const styles = {
     margin: 0,
     color: "#6b7280",
   },
-  carritoLinea: {
-    display: "grid",
-    gridTemplateColumns: "1.4fr 0.7fr 0.8fr 70px 1fr auto",
-    gap: 8,
-    alignItems: "center",
-    padding: "10px 0",
-    borderBottom: "1px solid #f1f5f9",
-    fontSize: 14,
-  },
-  carritoNombre: {
-    fontWeight: 600,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  carritoEscala: {
-    textAlign: "center",
-    color: "#374151",
-  },
-  carritoPrecio: {
-    textAlign: "right",
-  },
-  carritoCantidad: {
-    width: "100%",
-    padding: 6,
-    borderRadius: 8,
-    border: "1px solid #d1d5db",
-    textAlign: "center",
-    boxSizing: "border-box",
-  },
-  carritoSubtotal: {
-    textAlign: "right",
-    fontWeight: 600,
-  },
-  btnDelete: {
-    border: "none",
-    background: "transparent",
-    fontSize: 18,
-    cursor: "pointer",
-  },
+  carritoCard: {
+  borderBottom: "1px solid #f1f5f9",
+  padding: "10px 0",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+},
+
+carritoLinea1: {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+},
+
+carritoNombreCompleto: {
+  fontWeight: 600,
+  fontSize: 14,
+  lineHeight: 1.2,
+  flex: 1,
+},
+
+carritoLinea2: {
+  display: "grid",
+  gridTemplateColumns: "0.8fr 1fr 80px 1fr",
+  gap: 8,
+  alignItems: "center",
+  fontSize: 14,
+},
+
+carritoEscala: {
+  textAlign: "left",
+  color: "#374151",
+  fontSize: 13,
+},
+
+carritoPrecio: {
+  textAlign: "left",
+  fontSize: 13,
+},
+
+carritoCantidad: {
+  width: "100%",
+  padding: 6,
+  borderRadius: 8,
+  border: "1px solid #d1d5db",
+  textAlign: "center",
+  boxSizing: "border-box",
+},
+
+carritoSubtotal: {
+  textAlign: "right",
+  fontWeight: 600,
+  fontSize: 13,
+},
+
+btnDelete: {
+  border: "none",
+  background: "transparent",
+  fontSize: 18,
+  cursor: "pointer",
+  padding: 0,
+},
   resumenRow: {
     display: "flex",
     justifyContent: "space-between",
@@ -549,4 +582,76 @@ const styles = {
     fontSize: 16,
     fontWeight: 700,
   },
+  resultadoCard: {
+  borderBottom: "1px solid #f1f5f9",
+  padding: "8px 0",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+},
+
+resultadoLinea1: {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+},
+
+resultadoNombreCompleto: {
+  fontWeight: 600,
+  fontSize: 14,
+  lineHeight: 1.2,
+  flex: 1,
+},
+
+resultadoStock: {
+  fontSize: 12,
+  color: "#4b5563",
+  whiteSpace: "nowrap",
+},
+
+resultadoLinea2: {
+  display: "grid",
+  gridTemplateColumns: "1fr 70px auto auto",
+  gap: 8,
+  alignItems: "center",
+},
+
+resultadoEscalas: {
+  fontSize: 12,
+  color: "#6b7280",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 6,
+},
+
+escalaInline: {
+  whiteSpace: "nowrap",
+},
+
+inputCantidadBusqueda: {
+  width: "100%",
+  padding: 6,
+  borderRadius: 8,
+  border: "1px solid #d1d5db",
+  textAlign: "center",
+  boxSizing: "border-box",
+},
+
+resultadoPrecioAplicado: {
+  fontSize: 12,
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+},
+
+btnAgregar: {
+  border: "none",
+  borderRadius: 8,
+  background: "#2563eb",
+  color: "#fff",
+  width: 34,
+  height: 34,
+  fontSize: 18,
+  fontWeight: 700,
+},
 };
