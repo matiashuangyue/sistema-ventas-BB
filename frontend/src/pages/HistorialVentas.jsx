@@ -221,7 +221,7 @@ export default function HistorialVentas() {
             <label style={styles.label}>Desde</label>
             <input
               type="date"
-              style={styles.input}
+              style={{ ...styles.input, ...styles.dateInput }}
               value={desde}
               onChange={(e) => setDesde(e.target.value)}
             />
@@ -231,7 +231,7 @@ export default function HistorialVentas() {
             <label style={styles.label}>Hasta</label>
             <input
               type="date"
-              style={styles.input}
+              style={{ ...styles.input, ...styles.dateInput }}
               value={hasta}
               onChange={(e) => setHasta(e.target.value)}
             />
@@ -385,6 +385,13 @@ const styles = {
     border: "1px solid #d1d5db",
     fontSize: 15,
     boxSizing: "border-box",
+  },
+  dateInput: {
+    minHeight: 42,
+    paddingRight: 12,
+    appearance: "none",
+    WebkitAppearance: "none",
+    backgroundColor: "#fff",
   },
   filtrosActions: {
     display: "flex",
