@@ -1,8 +1,13 @@
+require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
-const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3");
+const { PrismaPg } = require("@prisma/adapter-pg");
 
-const adapter = new PrismaBetterSqlite3({
-  url: "file:./prisma/dev.db",
+if (!process.env.DATABASE_URL) {
+  throw new Error("Falta DATABASE_URL en el entorno.");
+}
+
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
 });
 
 const prisma = new PrismaClient({ adapter });

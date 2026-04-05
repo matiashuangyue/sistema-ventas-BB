@@ -1,9 +1,11 @@
-generator client {
-  provider = "prisma-client-js"
+datasource db {
+  provider = "postgresql"
+  // Borramos la línea de url = env(...) de acá
 }
 
-datasource db {
-  provider = "sqlite"
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"] // Agregá esto para mayor compatibilidad
 }
 
 model Usuario {
