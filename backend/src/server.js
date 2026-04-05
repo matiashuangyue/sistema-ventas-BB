@@ -422,43 +422,56 @@ app.get("/ventas", async (req, res) => {
   }
 });
 
-// 👉 registrar usuario
+// 👉 registrar usuario (CON CÓDIGO DE INVITACIÓN)
 app.post("/auth/register", async (req, res) => {
   try {
-    const { nombre, username, password, rol } = req.body;
+    const { nombre, username, password, email, rol, codigoInvitacion } = req.body;
 
-    if (!nombre || !username || !password) {
-      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    // 1. CLAVE MAESTRA (Cambiá esto por lo que quieras)
+    const CODIGO_CORRECTO = "BB2026_PRO"; 
+
+    if (codigoInvitacion !== CODIGO_CORRECTO) {
+      return res.status(401).json({ error: "Código de invitación incorrecto. Acceso denegado." });
     }
 
-    const existe = await prisma.usuario.findUnique({
-      where: { username },
-    });
-
-    if (existe) {
-      return res.status(400).json({ error: "El usuario ya existe" });
+    // 2. Validación de campos obligatorios (incluido email)
+    if (!nombre || !username || !password || !email) {
+      return res.status(400).json({ error: "Faltan datos obligatorios (nombre, usuario, email y clave)" });
     }
 
+    // 3. Verificar si el usuario o el email ya existen
+    const existeUsuario = await prisma.usuario.findUnique({ where: { username } });
+    const existeEmail = await prisma.usuario.findUnique({ where: { email } });
+
+    if (existeUsuario) return res.status(400).json({ error: "El nombre de usuario ya está en uso" });
+    if (existeEmail) return res.status(400).json({ error: "El correo electrónico ya está registrado" });
+
+    // 4. Encriptar contraseña
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // 5. Crear usuario en la base de datos
     const usuario = await prisma.usuario.create({
       data: {
         nombre,
         username,
+        email,
         password: passwordHash,
         rol: rol || "admin",
       },
     });
 
+    // 6. Respuesta (sin mandar la contraseña por seguridad)
     res.json({
       id: usuario.id,
       nombre: usuario.nombre,
       username: usuario.username,
+      email: usuario.email,
       rol: usuario.rol,
     });
+
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Error registrando usuario" });
+    res.status(500).json({ error: "Error interno al registrar usuario" });
   }
 });
 

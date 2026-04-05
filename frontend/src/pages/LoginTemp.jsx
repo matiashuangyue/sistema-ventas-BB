@@ -1,14 +1,24 @@
 import { useState } from "react";
 import { login } from "../services/auth";
+import Signup from "./Signup"; // 👈 Usamos el archivo separado
+
+const API = "http://localhost:8080";
 
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [esRegistro, setEsRegistro] = useState(false);
+
+  // Lógica de navegación
+  if (esRegistro) {
+    // Le pasamos la prop API para que el Signup sepa a dónde pegar
+    return <Signup onBack={() => setEsRegistro(false)} API={API} />;
+  }
 
   const handleLogin = async (e) => {
-    if (e) e.preventDefault(); // Previene recarga si se usa en un <form>
+    e.preventDefault();
     if (!username || !password) return setError("Completá todos los campos");
 
     try {
@@ -67,9 +77,12 @@ export default function Login({ onLogin }) {
           >
             {loading ? "Verificando..." : "Ingresar"}
           </button>
+
+          <button type="button" onClick={() => setEsRegistro(true)} style={styles.btnLink}>
+            ¿No tenés cuenta? Registrate aquí
+          </button>
         </form>
       </div>
-      
       <p style={styles.footerText}>© 2026 Sistema de Gestión Interno</p>
     </div>
   );
@@ -77,83 +90,34 @@ export default function Login({ onLogin }) {
 
 const styles = {
   fullPage: {
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    minHeight: "100vh",
-    background: "#f3f4f6", // Gris clarito de fondo
-    padding: "20px",
+    display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
+    minHeight: "100vh", background: "#f3f4f6", padding: "20px",
   },
   card: {
-    background: "#fff",
-    width: "100%",
-    maxWidth: "400px",
-    borderRadius: "16px",
-    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)",
-    padding: "32px",
-    boxSizing: "border-box",
+    background: "#fff", width: "100%", maxWidth: "400px", borderRadius: "16px",
+    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)", padding: "32px", boxSizing: "border-box",
   },
-  header: {
-    textAlign: "center",
-    marginBottom: "24px",
-  },
-  title: {
-    margin: 0,
-    color: "#2563eb",
-    fontSize: "24px",
-    fontWeight: "800",
-  },
-  subtitle: {
-    margin: "8px 0 0 0",
-    color: "#6b7280",
-    fontSize: "14px",
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "6px",
-  },
-  label: {
-    fontSize: "13px",
-    fontWeight: "600",
-    color: "#374151",
-  },
+  header: { textAlign: "center", marginBottom: "24px" },
+  title: { margin: 0, color: "#2563eb", fontSize: "24px", fontWeight: "800" },
+  subtitle: { margin: "8px 0 0 0", color: "#6b7280", fontSize: "14px" },
+  form: { display: "flex", flexDirection: "column", gap: "16px" },
+  inputGroup: { display: "flex", flexDirection: "column", gap: "6px" },
+  label: { fontSize: "13px", fontWeight: "600", color: "#374151" },
   input: {
-    padding: "12px",
-    borderRadius: "10px",
-    border: "1px solid #d1d5db",
-    fontSize: "16px", // Evita zoom automático en iPhone
-    outline: "none",
-    transition: "border-color 0.2s",
+    padding: "12px", borderRadius: "10px", border: "1px solid #d1d5db",
+    fontSize: "16px", outline: "none", width: "100%", boxSizing: "border-box"
   },
   btnPrincipal: {
-    marginTop: "8px",
-    padding: "14px",
-    borderRadius: "10px",
-    border: "none",
-    color: "#fff",
-    fontSize: "16px",
-    fontWeight: "700",
-    transition: "all 0.2s",
+    marginTop: "8px", padding: "14px", borderRadius: "10px", border: "none",
+    color: "#fff", fontSize: "16px", fontWeight: "700", transition: "all 0.2s",
+  },
+  btnLink: {
+    background: "none", border: "none", color: "#2563eb", textDecoration: "underline",
+    cursor: "pointer", fontSize: "14px", marginTop: "8px", fontWeight: "600"
   },
   errorBox: {
-    background: "#fee2e2",
-    color: "#b91c1c",
-    padding: "10px",
-    borderRadius: "8px",
-    fontSize: "13px",
-    textAlign: "center",
-    fontWeight: "500",
+    background: "#fee2e2", color: "#b91c1c", padding: "10px", borderRadius: "8px",
+    fontSize: "13px", textAlign: "center", fontWeight: "500",
   },
-  footerText: {
-    marginTop: "20px",
-    fontSize: "12px",
-    color: "#9ca3af",
-  }
+  footerText: { marginTop: "20px", fontSize: "12px", color: "#9ca3af" }
 };
