@@ -48,6 +48,9 @@ export default function Login({ onLogin }) {
               style={styles.input}
               placeholder="Ej: admin"
               value={username}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               onChange={(e) => setUsername(e.target.value)}
               autoFocus
             />
@@ -60,6 +63,9 @@ export default function Login({ onLogin }) {
               style={styles.input}
               placeholder="••••••••"
               value={password}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>

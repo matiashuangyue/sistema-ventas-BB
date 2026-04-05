@@ -54,6 +54,9 @@ export default function Signup({ onBack, API }) {
             style={styles.input}
             placeholder="Nombre de usuario"
             required
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             onChange={(e) => setForm({ ...form, username: e.target.value })}
           />
           <input
@@ -61,6 +64,10 @@ export default function Signup({ onBack, API }) {
             style={styles.input}
             placeholder="Correo electrónico"
             required
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            inputMode="email"
             onChange={(e) => setForm({ ...form, email: e.target.value })}
           />
           <input
@@ -68,6 +75,9 @@ export default function Signup({ onBack, API }) {
             style={styles.input}
             placeholder="Contraseña"
             required
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
           />
 
@@ -81,6 +91,9 @@ export default function Signup({ onBack, API }) {
             style={styles.inputSecret}
             placeholder="Clave de acceso"
             required
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             onChange={(e) => setForm({ ...form, codigoInvitacion: e.target.value })}
           />
 

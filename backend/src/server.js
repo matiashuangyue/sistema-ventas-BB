@@ -426,22 +426,33 @@ app.get("/ventas", async (req, res) => {
 app.post("/auth/register", async (req, res) => {
   try {
     const { nombre, username, password, email, rol, codigoInvitacion } = req.body;
+    const nombreNormalizado = typeof nombre === "string" ? nombre.trim() : "";
+    const usernameNormalizado =
+      typeof username === "string" ? username.trim().toLowerCase() : "";
+    const emailNormalizado =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
+    const codigoInvitacionNormalizado =
+      typeof codigoInvitacion === "string" ? codigoInvitacion.trim() : "";
 
     // 1. CLAVE MAESTRA (Cambiá esto por lo que quieras)
     const CODIGO_CORRECTO = "BB2026_PRO"; 
 
-    if (codigoInvitacion !== CODIGO_CORRECTO) {
+    if (codigoInvitacionNormalizado !== CODIGO_CORRECTO) {
       return res.status(401).json({ error: "Código de invitación incorrecto. Acceso denegado." });
     }
 
     // 2. Validación de campos obligatorios (incluido email)
-    if (!nombre || !username || !password || !email) {
+    if (!nombreNormalizado || !usernameNormalizado || !password || !emailNormalizado) {
       return res.status(400).json({ error: "Faltan datos obligatorios (nombre, usuario, email y clave)" });
     }
 
     // 3. Verificar si el usuario o el email ya existen
-    const existeUsuario = await prisma.usuario.findUnique({ where: { username } });
-    const existeEmail = await prisma.usuario.findUnique({ where: { email } });
+    const existeUsuario = await prisma.usuario.findFirst({
+      where: { username: { equals: usernameNormalizado, mode: "insensitive" } },
+    });
+    const existeEmail = await prisma.usuario.findFirst({
+      where: { email: { equals: emailNormalizado, mode: "insensitive" } },
+    });
 
     if (existeUsuario) return res.status(400).json({ error: "El nombre de usuario ya está en uso" });
     if (existeEmail) return res.status(400).json({ error: "El correo electrónico ya está registrado" });
@@ -452,9 +463,9 @@ app.post("/auth/register", async (req, res) => {
     // 5. Crear usuario en la base de datos
     const usuario = await prisma.usuario.create({
       data: {
-        nombre,
-        username,
-        email,
+        nombre: nombreNormalizado,
+        username: usernameNormalizado,
+        email: emailNormalizado,
         password: passwordHash,
         rol: rol || "admin",
       },
@@ -479,9 +490,13 @@ app.post("/auth/register", async (req, res) => {
 app.post("/auth/login", async (req, res) => {
   try {
     const { username, password } = req.body;
+    const usernameNormalizado =
+      typeof username === "string" ? username.trim().toLowerCase() : "";
 
-    const usuario = await prisma.usuario.findUnique({
-      where: { username },
+    const usuario = await prisma.usuario.findFirst({
+      where: {
+        username: { equals: usernameNormalizado, mode: "insensitive" },
+      },
     });
 
     if (!usuario) {
