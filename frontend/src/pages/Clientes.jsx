@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-
-const API = "http://localhost:8080";
+import { API_URL as API } from "../config/api";
 
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);

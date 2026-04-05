@@ -23,7 +23,7 @@ function App() {
       case "productos":
         return <Productos />;
       case "clientes":
-        return <Clientes />;s
+        return <Clientes />;
       case "reportes":
         return <Reportes />;
       default:

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getToken } from "../services/auth";
-
-const API = "http://localhost:8080";
+import { API_URL as API } from "../config/api";
 
 export default function Productos() {
   const token = getToken();

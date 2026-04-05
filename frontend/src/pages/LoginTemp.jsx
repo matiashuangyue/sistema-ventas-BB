@@ -2,7 +2,7 @@ import { useState } from "react";
 import { login } from "../services/auth";
 import Signup from "./Signup"; // 👈 Usamos el archivo separado
 
-const API = "http://localhost:8080";
+import { API_URL as API } from "../config/api";
 
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState("");

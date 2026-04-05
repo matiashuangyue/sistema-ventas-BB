@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-
-const API = "http://localhost:8080";
+import { API_URL as API } from "../config/api";
 
 export default function Reportes() {
   const [desde, setDesde] = useState("");
