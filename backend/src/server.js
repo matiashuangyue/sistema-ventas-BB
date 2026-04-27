@@ -38,6 +38,7 @@ app.post("/productos", async (req, res) => {
 app.get("/productos", async (req, res) => {
   try {
     const productos = await prisma.producto.findMany({
+      where: {activo: true},
       include: {
         variantes: true,
       },
