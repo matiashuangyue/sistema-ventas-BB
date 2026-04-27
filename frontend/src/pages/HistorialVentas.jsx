@@ -29,6 +29,7 @@ export default function HistorialVentas() {
 
   const [ventas, setVentas] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [eliminandoVenta, setEliminandoVenta] = useState(false);
 
   const [ventaDetalle, setVentaDetalle] = useState(null);
   const [detalleOpen, setDetalleOpen] = useState(false);
@@ -81,118 +82,160 @@ export default function HistorialVentas() {
   }
 
   function descargarPDF(venta) {
-  const doc = new jsPDF();
+    const doc = new jsPDF();
 
-  const cliente = venta.cliente;
-  const fecha = formatearFecha(venta.fecha);
+    const cliente = venta.cliente;
+    const fecha = formatearFecha(venta.fecha);
 
-  // --- ENCABEZADO (Negocio a la izquierda, Venta a la derecha) ---
-  doc.setFontSize(18);
-  doc.setTextColor(37, 99, 235); // Azul institucional
-  doc.setFont("helvetica", "bold");
-  doc.text("B&B Distribuidora", 14, 15);
-  
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  doc.setFont("helvetica", "normal");
-  doc.text("Contacto: 3464528526", 14, 22);
+    // --- ENCABEZADO (Negocio a la izquierda, Venta a la derecha) ---
+    doc.setFontSize(18);
+    doc.setTextColor(37, 99, 235); // Azul institucional
+    doc.setFont("helvetica", "bold");
+    doc.text("B&B Distribuidora", 14, 15);
 
-  doc.setTextColor(0);
-  doc.text(`Fecha: ${fecha}`, 196, 15, { align: "right" });
-  doc.text(`Venta: #${venta.id}`, 196, 22, { align: "right" });
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.setFont("helvetica", "normal");
+    doc.text("Contacto: 3464528526", 14, 22);
 
-  // --- SECCIÓN: DATOS DEL CLIENTE ---
-  doc.setDrawColor(230); // Línea sutil
-  doc.line(14, 28, 196, 28);
-
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("DATOS DEL CLIENTE", 14, 38);
-
-  // Cuadro de datos del cliente
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  
-  let currentY = 46;
-
-  if (cliente) {
-    // Usamos un formato de etiqueta: valor para mayor orden
-    const datos = [
-      { label: "Nombre:", value: cliente.nombre || "Sin nombre" },
-      { label: "CUIT/CUIL:", value: cliente.cuit || "-" },
-      { label: "Teléfono:", value: cliente.telefono || "-" },
-      { label: "Dirección:", value: `${cliente.direccion || "-"} (${cliente.localidad || "-"})` }
-    ];
-
-    datos.forEach(dato => {
-      doc.setFont("helvetica", "bold");
-      doc.text(dato.label, 14, currentY);
-      doc.setFont("helvetica", "normal");
-      doc.text(dato.value, 40, currentY); // Desplazado a la derecha del label
-      currentY += 6;
-    });
-  } else {
-    doc.text("Consumidor Final", 14, currentY);
-    currentY += 6;
-  }
-
-  // --- TABLA DE PRODUCTOS ---
-  // El startY ahora es dinámico según cuántos datos de cliente se escribieron
-  autoTable(doc, {
-    startY: currentY + 5,
-    head: [["Producto", "Cantidad", "P. Unitario", "Subtotal"]],
-    body: venta.detalles.map((item) => [
-      `${item.variante?.producto?.nombre || ""} - ${item.variante?.nombre || ""}`,
-      item.cantidad,
-      `$${item.precioUnitario}`,
-      `$${item.subtotal}`,
-    ]),
-    headStyles: { fillColor: [37, 99, 235], halign: 'center' },
-    columnStyles: {
-      1: { halign: 'center' },
-      2: { halign: 'right' },
-      3: { halign: 'right' },
-    },
-    styles: { fontSize: 9 }
-  });
-
-  // --- TOTALES ---
-  const finalY = doc.lastAutoTable?.finalY || 100;
-  const margenDerecho = 196;
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  
-  // Subtotal
-  doc.text("Subtotal:", 140, finalY + 10);
-  doc.text(`$${venta.subtotal}`, margenDerecho, finalY + 10, { align: "right" });
-
-  // Descuento (Solo si existe)
-  if (venta.descuento > 0) {
-    doc.text("Descuento:", 140, finalY + 16);
-    doc.setTextColor(200, 0, 0); // Rojo para el descuento
-    doc.text(`- $${venta.descuento}`, margenDerecho, finalY + 16, { align: "right" });
     doc.setTextColor(0);
+    doc.text(`Fecha: ${fecha}`, 196, 15, { align: "right" });
+    doc.text(`Venta: #${venta.id}`, 196, 22, { align: "right" });
+
+    // --- SECCIÓN: DATOS DEL CLIENTE ---
+    doc.setDrawColor(230); // Línea sutil
+    doc.line(14, 28, 196, 28);
+
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("DATOS DEL CLIENTE", 14, 38);
+
+    // Cuadro de datos del cliente
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+
+    let currentY = 46;
+
+    if (cliente) {
+      // Usamos un formato de etiqueta: valor para mayor orden
+      const datos = [
+        { label: "Nombre:", value: cliente.nombre || "Sin nombre" },
+        { label: "CUIT/CUIL:", value: cliente.cuit || "-" },
+        { label: "Teléfono:", value: cliente.telefono || "-" },
+        {
+          label: "Dirección:",
+          value: `${cliente.direccion || "-"} (${cliente.localidad || "-"})`,
+        },
+      ];
+
+      datos.forEach((dato) => {
+        doc.setFont("helvetica", "bold");
+        doc.text(dato.label, 14, currentY);
+        doc.setFont("helvetica", "normal");
+        doc.text(dato.value, 40, currentY); // Desplazado a la derecha del label
+        currentY += 6;
+      });
+    } else {
+      doc.text("Consumidor Final", 14, currentY);
+      currentY += 6;
+    }
+
+    // --- TABLA DE PRODUCTOS ---
+    // El startY ahora es dinámico según cuántos datos de cliente se escribieron
+    autoTable(doc, {
+      startY: currentY + 5,
+      head: [["Producto", "Cantidad", "P. Unitario", "Subtotal"]],
+      body: venta.detalles.map((item) => [
+        `${item.variante?.producto?.nombre || ""} - ${item.variante?.nombre || ""}`,
+        item.cantidad,
+        `$${item.precioUnitario}`,
+        `$${item.subtotal}`,
+      ]),
+      headStyles: { fillColor: [37, 99, 235], halign: "center" },
+      columnStyles: {
+        1: { halign: "center" },
+        2: { halign: "right" },
+        3: { halign: "right" },
+      },
+      styles: { fontSize: 9 },
+    });
+
+    // --- TOTALES ---
+    const finalY = doc.lastAutoTable?.finalY || 100;
+    const margenDerecho = 196;
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+
+    // Subtotal
+    doc.text("Subtotal:", 140, finalY + 10);
+    doc.text(`$${venta.subtotal}`, margenDerecho, finalY + 10, {
+      align: "right",
+    });
+
+    // Descuento (Solo si existe)
+    if (venta.descuento > 0) {
+      doc.text("Descuento:", 140, finalY + 16);
+      doc.setTextColor(200, 0, 0); // Rojo para el descuento
+      doc.text(`- $${venta.descuento}`, margenDerecho, finalY + 16, {
+        align: "right",
+      });
+      doc.setTextColor(0);
+    }
+
+    // Línea de Total
+    doc.setDrawColor(37, 99, 235);
+    doc.setLineWidth(0.5);
+    doc.line(140, finalY + 20, 196, finalY + 20);
+
+    // Total Final
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL:", 140, finalY + 28);
+    doc.text(`$${venta.total}`, margenDerecho, finalY + 28, { align: "right" });
+
+    // Guardar el PDF
+    doc.save(`venta-${venta.id}.pdf`);
   }
-
-  // Línea de Total
-  doc.setDrawColor(37, 99, 235);
-  doc.setLineWidth(0.5);
-  doc.line(140, finalY + 20, 196, finalY + 20);
-
-  // Total Final
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.text("TOTAL:", 140, finalY + 28);
-  doc.text(`$${venta.total}`, margenDerecho, finalY + 28, { align: "right" });
-
-  // Guardar el PDF
-  doc.save(`venta-${venta.id}.pdf`);
-}
 
   function cerrarDetalle() {
     setDetalleOpen(false);
     setVentaDetalle(null);
+  }
+
+  async function eliminarVenta() {
+    if (!ventaDetalle) {
+      return;
+    }
+
+    const confirmar = window.confirm(
+      `¿Seguro que querés borrar la venta #${ventaDetalle.id}? Esta acción restaura el stock y no se puede deshacer.`,
+    );
+
+    if (!confirmar) {
+      return;
+    }
+
+    try {
+      setEliminandoVenta(true);
+
+      const res = await fetch(`${API}/ventas/${ventaDetalle.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Error eliminando venta");
+      }
+
+      cerrarDetalle();
+      await cargarVentas();
+    } catch (error) {
+      console.error(error);
+      alert(error.message);
+    } finally {
+      setEliminandoVenta(false);
+    }
   }
 
   function limpiarFiltros() {
@@ -288,7 +331,9 @@ export default function HistorialVentas() {
           <div style={styles.overlay} onClick={cerrarDetalle}></div>
 
           <div style={styles.modal}>
-            <h3 style={styles.modalTitle}>Detalle de venta #{ventaDetalle.id}</h3>
+            <h3 style={styles.modalTitle}>
+              Detalle de venta #{ventaDetalle.id}
+            </h3>
 
             <div style={styles.detalleInfo}>
               <div>
@@ -339,8 +384,17 @@ export default function HistorialVentas() {
               </button>
 
               <button
+                style={styles.btnDanger}
+                onClick={eliminarVenta}
+                disabled={eliminandoVenta}
+              >
+                {eliminandoVenta ? "Borrando..." : "Borrar venta"}
+              </button>
+
+              <button
                 style={styles.btnPrincipal}
                 onClick={() => descargarPDF(ventaDetalle)}
+                disabled={eliminandoVenta}
               >
                 Descargar PDF
               </button>
@@ -412,6 +466,14 @@ const styles = {
     borderRadius: 10,
     background: "#fff",
     color: "#111827",
+    padding: "10px 14px",
+    fontWeight: 600,
+  },
+  btnDanger: {
+    border: "1px solid #ef4444",
+    borderRadius: 10,
+    background: "#fff5f5",
+    color: "#b91c1c",
     padding: "10px 14px",
     fontWeight: 600,
   },
@@ -531,5 +593,6 @@ const styles = {
     display: "flex",
     justifyContent: "flex-end",
     gap: 8,
+    flexWrap: "wrap",
   },
 };

@@ -13,7 +13,6 @@ app.get("/", (req, res) => {
   res.send("API funcionando");
 });
 
-
 // 👉 crear producto
 app.post("/productos", async (req, res) => {
   try {
@@ -32,7 +31,10 @@ app.post("/productos", async (req, res) => {
     });
 
     if (existente) {
-      return res.status(400).json({ error: "Ya existe un producto activo con ese nombre. Si querés agregar una variante, usá el producto existente." });
+      return res.status(400).json({
+        error:
+          "Ya existe un producto activo con ese nombre. Si querés agregar una variante, usá el producto existente.",
+      });
     }
 
     const producto = await prisma.producto.create({
@@ -50,12 +52,11 @@ app.post("/productos", async (req, res) => {
   }
 });
 
-
 // 👉 listar productos
 app.get("/productos", async (req, res) => {
   try {
     const productos = await prisma.producto.findMany({
-      where: {activo: true},
+      where: { activo: true },
       include: {
         variantes: true,
       },
@@ -77,7 +78,9 @@ app.post("/variantes", async (req, res) => {
 
     // Validar datos obligatorios
     if (!nombre || !productoId) {
-      return res.status(400).json({ error: "Faltan datos: nombre y productoId son obligatorios" });
+      return res
+        .status(400)
+        .json({ error: "Faltan datos: nombre y productoId son obligatorios" });
     }
 
     // Verificar si ya existe una variante con el mismo nombre para ese producto
@@ -89,7 +92,10 @@ app.post("/variantes", async (req, res) => {
     });
 
     if (varianteExistente) {
-      return res.status(400).json({ error: "Ya existe una variante con ese nombre para este producto. Usá la existente o cambiá el nombre." });
+      return res.status(400).json({
+        error:
+          "Ya existe una variante con ese nombre para este producto. Usá la existente o cambiá el nombre.",
+      });
     }
 
     // Crear la nueva variante
@@ -154,7 +160,9 @@ app.put("/variantes/:id/stock", async (req, res) => {
 
     const nuevoStock = Number(stock);
     if (nuevoStock < 0) {
-      return res.status(400).json({ error: "El stock no puede quedar negativo" });
+      return res
+        .status(400)
+        .json({ error: "El stock no puede quedar negativo" });
     }
 
     const variante = await prisma.variante.update({
@@ -328,115 +336,118 @@ app.post("/ventas", async (req, res) => {
       return res.status(400).json({ error: "La venta debe incluir items" });
     }
 
-    const venta = await prisma.$transaction(async (tx) => {
-      let subtotal = 0;
+    const venta = await prisma.$transaction(
+      async (tx) => {
+        let subtotal = 0;
 
-      const nuevaVenta = await tx.venta.create({
-        data: {
-          clienteId,
-          subtotal: 0,
-          descuento,
-          total: 0,
-        },
-      });
-
-      for (const item of items) {
-        if (!item.varianteId || !item.cantidad) {
-          throw new Error("Hay items incompletos");
-        }
-
-        if (item.cantidad <= 0) {
-          throw new Error("La cantidad debe ser mayor a 0");
-        }
-
-        const variante = await tx.variante.findUnique({
-          where: { id: item.varianteId },
+        const nuevaVenta = await tx.venta.create({
+          data: {
+            clienteId,
+            subtotal: 0,
+            descuento,
+            total: 0,
+          },
         });
 
-        if (!variante) {
-          throw new Error("Variante no encontrada");
-        }
+        for (const item of items) {
+          if (!item.varianteId || !item.cantidad) {
+            throw new Error("Hay items incompletos");
+          }
 
-        if (variante.stock < item.cantidad) {
-          throw new Error(`Stock insuficiente para ${variante.nombre}`);
-        }
+          if (item.cantidad <= 0) {
+            throw new Error("La cantidad debe ser mayor a 0");
+          }
 
-        // Buscar todos los precios de esa variante cuyo mínimo sea <= cantidad
-        const preciosDisponibles = await tx.precioVariante.findMany({
-          where: {
-            varianteId: item.varianteId,
-            cantidadMinima: {
-              lte: item.cantidad,
+          const variante = await tx.variante.findUnique({
+            where: { id: item.varianteId },
+          });
+
+          if (!variante) {
+            throw new Error("Variante no encontrada");
+          }
+
+          if (variante.stock < item.cantidad) {
+            throw new Error(`Stock insuficiente para ${variante.nombre}`);
+          }
+
+          // Buscar todos los precios de esa variante cuyo mínimo sea <= cantidad
+          const preciosDisponibles = await tx.precioVariante.findMany({
+            where: {
+              varianteId: item.varianteId,
+              cantidadMinima: {
+                lte: item.cantidad,
+              },
             },
+            include: {
+              listaPrecio: true,
+            },
+            orderBy: {
+              cantidadMinima: "desc",
+            },
+          });
+
+          if (preciosDisponibles.length === 0) {
+            throw new Error(
+              `No hay precio configurado para ${variante.nombre}`,
+            );
+          }
+
+          const precioAplicado = preciosDisponibles[0];
+          const precioUnitario = precioAplicado.precio;
+          const subtotalItem = precioUnitario * item.cantidad;
+
+          subtotal += subtotalItem;
+
+          await tx.ventaDetalle.create({
+            data: {
+              ventaId: nuevaVenta.id,
+              varianteId: item.varianteId,
+              cantidad: item.cantidad,
+              precioUnitario,
+              subtotal: subtotalItem,
+            },
+          });
+
+          await tx.variante.update({
+            where: { id: item.varianteId },
+            data: {
+              stock: {
+                decrement: item.cantidad,
+              },
+            },
+          });
+        }
+
+        if (descuento > subtotal) {
+          throw new Error("El descuento no puede ser mayor al subtotal");
+        }
+
+        const total = subtotal - descuento;
+
+        const ventaFinal = await tx.venta.update({
+          where: { id: nuevaVenta.id },
+          data: {
+            subtotal,
+            total,
           },
           include: {
-            listaPrecio: true,
-          },
-          orderBy: {
-            cantidadMinima: "desc",
-          },
-        });
-
-        if (preciosDisponibles.length === 0) {
-          throw new Error(`No hay precio configurado para ${variante.nombre}`);
-        }
-
-        const precioAplicado = preciosDisponibles[0];
-        const precioUnitario = precioAplicado.precio;
-        const subtotalItem = precioUnitario * item.cantidad;
-
-        subtotal += subtotalItem;
-
-        await tx.ventaDetalle.create({
-          data: {
-            ventaId: nuevaVenta.id,
-            varianteId: item.varianteId,
-            cantidad: item.cantidad,
-            precioUnitario,
-            subtotal: subtotalItem,
-          },
-        });
-
-        await tx.variante.update({
-          where: { id: item.varianteId },
-          data: {
-            stock: {
-              decrement: item.cantidad,
-            },
-          },
-        });
-      }
-
-      if (descuento > subtotal) {
-        throw new Error("El descuento no puede ser mayor al subtotal");
-      }
-
-      const total = subtotal - descuento;
-
-      const ventaFinal = await tx.venta.update({
-        where: { id: nuevaVenta.id },
-        data: {
-          subtotal,
-          total,
-        },
-        include: {
-          cliente: true,
-          detalles: {
-            include: {
-              variante: {
-                include: {
-                  producto: true,
+            cliente: true,
+            detalles: {
+              include: {
+                variante: {
+                  include: {
+                    producto: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
+        });
 
-      return ventaFinal;
-    },
-  {timeout: 600000}
-);
+        return ventaFinal;
+      },
+      { timeout: 600000 },
+    );
 
     res.json(venta);
   } catch (error) {
@@ -475,7 +486,8 @@ app.get("/ventas", async (req, res) => {
 // 👉 registrar usuario (CON CÓDIGO DE INVITACIÓN)
 app.post("/auth/register", async (req, res) => {
   try {
-    const { nombre, username, password, email, rol, codigoInvitacion } = req.body;
+    const { nombre, username, password, email, rol, codigoInvitacion } =
+      req.body;
     const nombreNormalizado = typeof nombre === "string" ? nombre.trim() : "";
     const usernameNormalizado =
       typeof username === "string" ? username.trim().toLowerCase() : "";
@@ -485,15 +497,24 @@ app.post("/auth/register", async (req, res) => {
       typeof codigoInvitacion === "string" ? codigoInvitacion.trim() : "";
 
     // 1. CLAVE MAESTRA (Cambiá esto por lo que quieras)
-    const CODIGO_CORRECTO = "BB2026_PRO"; 
+    const CODIGO_CORRECTO = "BB2026_PRO";
 
     if (codigoInvitacionNormalizado !== CODIGO_CORRECTO) {
-      return res.status(401).json({ error: "Código de invitación incorrecto. Acceso denegado." });
+      return res
+        .status(401)
+        .json({ error: "Código de invitación incorrecto. Acceso denegado." });
     }
 
     // 2. Validación de campos obligatorios (incluido email)
-    if (!nombreNormalizado || !usernameNormalizado || !password || !emailNormalizado) {
-      return res.status(400).json({ error: "Faltan datos obligatorios (nombre, usuario, email y clave)" });
+    if (
+      !nombreNormalizado ||
+      !usernameNormalizado ||
+      !password ||
+      !emailNormalizado
+    ) {
+      return res.status(400).json({
+        error: "Faltan datos obligatorios (nombre, usuario, email y clave)",
+      });
     }
 
     // 3. Verificar si el usuario o el email ya existen
@@ -504,8 +525,14 @@ app.post("/auth/register", async (req, res) => {
       where: { email: { equals: emailNormalizado, mode: "insensitive" } },
     });
 
-    if (existeUsuario) return res.status(400).json({ error: "El nombre de usuario ya está en uso" });
-    if (existeEmail) return res.status(400).json({ error: "El correo electrónico ya está registrado" });
+    if (existeUsuario)
+      return res
+        .status(400)
+        .json({ error: "El nombre de usuario ya está en uso" });
+    if (existeEmail)
+      return res
+        .status(400)
+        .json({ error: "El correo electrónico ya está registrado" });
 
     // 4. Encriptar contraseña
     const passwordHash = await bcrypt.hash(password, 10);
@@ -529,7 +556,6 @@ app.post("/auth/register", async (req, res) => {
       email: usuario.email,
       rol: usuario.rol,
     });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error interno al registrar usuario" });
@@ -550,7 +576,9 @@ app.post("/auth/login", async (req, res) => {
     });
 
     if (!usuario) {
-      return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
+      return res
+        .status(401)
+        .json({ error: "Usuario o contraseña incorrectos" });
     }
 
     if (!usuario.activo) {
@@ -560,7 +588,9 @@ app.post("/auth/login", async (req, res) => {
     const passwordOk = await bcrypt.compare(password, usuario.password);
 
     if (!passwordOk) {
-      return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
+      return res
+        .status(401)
+        .json({ error: "Usuario o contraseña incorrectos" });
     }
 
     const token = jwt.sign(
@@ -570,7 +600,7 @@ app.post("/auth/login", async (req, res) => {
         rol: usuario.rol,
       },
       "secreto_super_seguro",
-      { expiresIn: "8h" }
+      { expiresIn: "8h" },
     );
 
     res.json({
@@ -649,7 +679,9 @@ app.post("/compras", authMiddleware, async (req, res) => {
     const { proveedor = null, observaciones = null, items } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: "La compra debe incluir al menos un item" });
+      return res
+        .status(400)
+        .json({ error: "La compra debe incluir al menos un item" });
     }
 
     const compra = await prisma.$transaction(async (tx) => {
@@ -762,8 +794,6 @@ app.get("/compras", authMiddleware, async (req, res) => {
   }
 });
 
-
-
 // 👉 actualizar precio de variante
 app.put("/precios-variantes/:id", async (req, res) => {
   try {
@@ -790,7 +820,15 @@ app.put("/precios-variantes/:id", async (req, res) => {
 // 👉 crear cliente
 app.post("/clientes", async (req, res) => {
   try {
-    const { nombre, email, telefono, direccion, localidad, cuit, observaciones } = req.body;
+    const {
+      nombre,
+      email,
+      telefono,
+      direccion,
+      localidad,
+      cuit,
+      observaciones,
+    } = req.body;
 
     if (!nombre) {
       return res.status(400).json({ error: "El nombre es obligatorio" });
@@ -811,7 +849,9 @@ app.post("/clientes", async (req, res) => {
     res.json(cliente);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Error creando cliente. Tal vez el email ya existe." });
+    res
+      .status(500)
+      .json({ error: "Error creando cliente. Tal vez el email ya existe." });
   }
 });
 
@@ -866,7 +906,15 @@ app.get("/clientes/buscar", async (req, res) => {
 app.put("/clientes/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, email, telefono, direccion, localidad, cuit, observaciones } = req.body;
+    const {
+      nombre,
+      email,
+      telefono,
+      direccion,
+      localidad,
+      cuit,
+      observaciones,
+    } = req.body;
 
     if (!nombre) {
       return res.status(400).json({ error: "El nombre es obligatorio" });
@@ -1034,7 +1082,7 @@ app.get("/ventas/historial", async (req, res) => {
       cantidadItems: venta.detalles.length,
       unidadesTotales: venta.detalles.reduce(
         (acc, item) => acc + item.cantidad,
-        0
+        0,
       ),
     }));
 
@@ -1077,6 +1125,60 @@ app.get("/ventas/:id", async (req, res) => {
     res.status(500).json({ error: "Error obteniendo detalle de venta" });
   }
 });
+
+app.delete("/ventas/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ventaId = Number(id);
+
+    if (Number.isNaN(ventaId)) {
+      return res.status(400).json({ error: "ID de venta inválido" });
+    }
+
+    const resultado = await prisma.$transaction(async (tx) => {
+      const venta = await tx.venta.findUnique({
+        where: { id: ventaId },
+        include: {
+          detalles: true,
+        },
+      });
+
+      if (!venta) {
+        return null;
+      }
+
+      for (const detalle of venta.detalles) {
+        await tx.variante.update({
+          where: { id: detalle.varianteId },
+          data: {
+            stock: {
+              increment: detalle.cantidad,
+            },
+          },
+        });
+      }
+
+      await tx.ventaDetalle.deleteMany({
+        where: { ventaId: venta.id },
+      });
+
+      await tx.venta.delete({
+        where: { id: venta.id },
+      });
+
+      return venta.id;
+    });
+
+    if (resultado === null) {
+      return res.status(404).json({ error: "Venta no encontrada" });
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error eliminando venta" });
+  }
+});
 app.get("/reportes/dashboard", async (req, res) => {
   try {
     const { desde, hasta } = req.query;
@@ -1092,67 +1194,64 @@ app.get("/reportes/dashboard", async (req, res) => {
     const stats = await prisma.venta.aggregate({
       where: filtroFecha,
       _sum: { total: true },
-      _count: { id: true }
+      _count: { id: true },
     });
 
     // 2. Ranking de Clientes en el período
     const clientesTopRaw = await prisma.venta.groupBy({
-      by: ['clienteId'],
+      by: ["clienteId"],
       where: filtroFecha,
       _sum: { total: true },
-      orderBy: { _sum: { total: 'desc' } },
-      take: 5
+      orderBy: { _sum: { total: "desc" } },
+      take: 5,
     });
 
     const rankingClientes = await Promise.all(
       clientesTopRaw.map(async (c) => {
-        const nombre = c.clienteId 
-          ? (await prisma.cliente.findUnique({ where: { id: c.clienteId } }))?.nombre 
+        const nombre = c.clienteId
+          ? (await prisma.cliente.findUnique({ where: { id: c.clienteId } }))
+              ?.nombre
           : "Consumidor Final";
         return { nombre: nombre || "Desconocido", total: c._sum.total };
-      })
+      }),
     );
 
     // 3. Top Productos en el período
     const topProdsRaw = await prisma.ventaDetalle.groupBy({
-      by: ['varianteId'],
+      by: ["varianteId"],
       where: { venta: filtroFecha },
       _sum: { cantidad: true, subtotal: true },
-      orderBy: { _sum: { cantidad: 'desc' } },
-      take: 5
+      orderBy: { _sum: { cantidad: "desc" } },
+      take: 5,
     });
 
     const topProductos = await Promise.all(
       topProdsRaw.map(async (item) => {
         const v = await prisma.variante.findUnique({
           where: { id: item.varianteId },
-          include: { producto: true }
+          include: { producto: true },
         });
-        return { 
-          nombre: `${v?.producto?.nombre} ${v?.nombre}`, 
+        return {
+          nombre: `${v?.producto?.nombre} ${v?.nombre}`,
           cantidad: item._sum.cantidad,
-          total: item._sum.subtotal
+          total: item._sum.subtotal,
         };
-      })
+      }),
     );
 
     res.json({
       resumen: {
         total: stats._sum.total || 0,
         cantidad: stats._count.id || 0,
-        promedio: stats._count.id > 0 ? (stats._sum.total / stats._count.id) : 0
+        promedio: stats._count.id > 0 ? stats._sum.total / stats._count.id : 0,
       },
       rankingClientes,
-      topProductos
+      topProductos,
     });
   } catch (error) {
     res.status(500).json({ error: "Error en reportes" });
   }
 });
-
-
-
-
 
 //////////////////////////////////////////////////////////////
 
