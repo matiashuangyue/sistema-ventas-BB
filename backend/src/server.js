@@ -386,7 +386,9 @@ app.post("/ventas", async (req, res) => {
       });
 
       return ventaFinal;
-    });
+    },
+  {timeout: 15000}
+);
 
     res.json(venta);
   } catch (error) {
