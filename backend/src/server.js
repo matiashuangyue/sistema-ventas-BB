@@ -387,7 +387,7 @@ app.post("/ventas", async (req, res) => {
 
       return ventaFinal;
     },
-  {timeout: 60000}
+  {timeout: 600000}
 );
 
     res.json(venta);
