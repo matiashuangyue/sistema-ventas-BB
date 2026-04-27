@@ -19,10 +19,27 @@ app.post("/productos", async (req, res) => {
   try {
     const { nombre, categoria } = req.body;
 
+    if (!nombre) {
+      return res.status(400).json({ error: "El nombre es obligatorio" });
+    }
+
+    // Verificar si ya existe un producto ACTIVO con el mismo nombre
+    const existente = await prisma.producto.findFirst({
+      where: {
+        nombre: nombre.trim(),
+        activo: true,
+      },
+    });
+
+    if (existente) {
+      return res.status(400).json({ error: "Ya existe un producto activo con ese nombre. Si querés agregar una variante, usá el producto existente." });
+    }
+
     const producto = await prisma.producto.create({
       data: {
-        nombre,
+        nombre: nombre.trim(),
         categoria,
+        activo: true, // por defecto
       },
     });
 
@@ -58,12 +75,30 @@ app.post("/variantes", async (req, res) => {
   try {
     const { nombre, stock, stockMinimo, productoId } = req.body;
 
+    // Validar datos obligatorios
+    if (!nombre || !productoId) {
+      return res.status(400).json({ error: "Faltan datos: nombre y productoId son obligatorios" });
+    }
+
+    // Verificar si ya existe una variante con el mismo nombre para ese producto
+    const varianteExistente = await prisma.variante.findFirst({
+      where: {
+        nombre: nombre.trim(),
+        productoId: Number(productoId),
+      },
+    });
+
+    if (varianteExistente) {
+      return res.status(400).json({ error: "Ya existe una variante con ese nombre para este producto. Usá la existente o cambiá el nombre." });
+    }
+
+    // Crear la nueva variante
     const variante = await prisma.variante.create({
       data: {
-        nombre,
+        nombre: nombre.trim(),
         stock: stock ?? 0,
-        stockMinimo,
-        productoId,
+        stockMinimo: stockMinimo ?? 0,
+        productoId: Number(productoId),
       },
     });
 
