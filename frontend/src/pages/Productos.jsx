@@ -406,7 +406,7 @@ async function guardarPrecio() {
   async function guardarStock() {
     const cantidad = Number(cantidadStock);
 
-    if (!cantidad || cantidad <= 0) {
+    if (!cantidad) {
       alert("Ingresá una cantidad válida");
       return;
     }
