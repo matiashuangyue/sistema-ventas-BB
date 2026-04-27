@@ -141,7 +141,7 @@ app.put("/variantes/:id/stock", async (req, res) => {
     const { id } = req.params;
     const { stock } = req.body;
 
-    if (stock == null || stock < 0) {
+    if (stock == null ) {
       return res.status(400).json({ error: "Stock inválido" });
     }
 
