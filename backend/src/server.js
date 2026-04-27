@@ -135,19 +135,31 @@ app.get("/variantes", async (req, res) => {
     res.status(500).json({ error: "Error obteniendo variantes" });
   }
 });
-// 👉 actualizar stock de variante
 app.put("/variantes/:id/stock", async (req, res) => {
   try {
     const { id } = req.params;
     const { stock } = req.body;
 
-    if (stock == null ) {
+    if (stock == null) {
       return res.status(400).json({ error: "Stock inválido" });
+    }
+
+    const varianteActual = await prisma.variante.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!varianteActual) {
+      return res.status(404).json({ error: "Variante no encontrada" });
+    }
+
+    const nuevoStock = Number(stock);
+    if (nuevoStock < 0) {
+      return res.status(400).json({ error: "El stock no puede quedar negativo" });
     }
 
     const variante = await prisma.variante.update({
       where: { id: Number(id) },
-      data: { stock: Number(stock) },
+      data: { stock: nuevoStock },
     });
 
     res.json(variante);
