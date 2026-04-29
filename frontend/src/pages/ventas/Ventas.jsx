@@ -2,6 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getToken } from "../../services/auth";
 import { API_URL as API } from "../../config/api";
 
+const FORMAS_PAGO = [
+  { value: "EFECTIVO", label: "Efectivo" },
+  { value: "TRANSFERENCIA", label: "Transferencia" },
+  { value: "TARJETA", label: "Tarjeta" },
+  { value: "CUENTA_CORRIENTE", label: "Cuenta corriente" },
+  { value: "OTRO", label: "Otro" },
+];
+
 export default function Ventas() {
   const token = getToken();
   const buscadorRef = useRef(null);
@@ -14,6 +22,10 @@ export default function Ventas() {
   const [clienteBusqueda, setClienteBusqueda] = useState("");
   const [clientesEncontrados, setClientesEncontrados] = useState([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
+  const [formaPago, setFormaPago] = useState("EFECTIVO");
+  const [montoPagado, setMontoPagado] = useState("");
+  const [montoPagadoManual, setMontoPagadoManual] = useState(false);
+  const [observacionesPago, setObservacionesPago] = useState("");
   
 
   useEffect(() => {
@@ -197,6 +209,21 @@ export default function Ventas() {
 
   const subtotal = calcularSubtotal();
   const total = Math.max(0, subtotal - descuento);
+  const montoPagadoNumerico =
+    formaPago === "CUENTA_CORRIENTE" ? 0 : Number(montoPagado || 0);
+  const saldoPendiente = Math.max(0, total - montoPagadoNumerico);
+
+  useEffect(() => {
+    if (formaPago === "CUENTA_CORRIENTE") {
+      setMontoPagado("0");
+      setMontoPagadoManual(false);
+      return;
+    }
+
+    if (!montoPagadoManual) {
+      setMontoPagado(total > 0 ? String(total) : "");
+    }
+  }, [formaPago, montoPagadoManual, total]);
 
   async function confirmarVenta() {
     if (carrito.length === 0) {
@@ -223,6 +250,21 @@ export default function Ventas() {
       return;
     }
 
+    if (!Number.isFinite(montoPagadoNumerico) || montoPagadoNumerico < 0) {
+      alert("El monto pagado no puede ser negativo");
+      return;
+    }
+
+    if (montoPagadoNumerico > total) {
+      alert("El monto pagado no puede superar el total");
+      return;
+    }
+
+    if (saldoPendiente > 0 && !clienteSeleccionado) {
+      alert("Para dejar saldo pendiente tenes que seleccionar un cliente");
+      return;
+    }
+
     try {
       const res = await fetch(`${API}/ventas`, {
         method: "POST",
@@ -233,6 +275,9 @@ export default function Ventas() {
         body: JSON.stringify({
             clienteId: clienteSeleccionado?.id || null,
             descuento,
+            formaPago,
+            montoPagado: montoPagadoNumerico,
+            observacionesPago: observacionesPago.trim(),
             items: carrito.map((item) => ({
             varianteId: item.varianteId,
             cantidad: Number(item.cantidad),
@@ -253,6 +298,10 @@ export default function Ventas() {
       setClienteSeleccionado(null);
       setClienteBusqueda("");
       setClientesEncontrados([]);
+      setFormaPago("EFECTIVO");
+      setMontoPagado("");
+      setMontoPagadoManual(false);
+      setObservacionesPago("");
       await cargarVariantes();
 
       buscadorRef.current?.focus();
@@ -467,6 +516,54 @@ export default function Ventas() {
           />
         </div>
 
+        <div style={styles.pagoGrid}>
+          <div>
+            <label style={styles.label}>Forma de pago</label>
+            <select
+              style={styles.input}
+              value={formaPago}
+              onChange={(e) => {
+                setFormaPago(e.target.value);
+                setMontoPagadoManual(false);
+              }}
+            >
+              {FORMAS_PAGO.map((forma) => (
+                <option key={forma.value} value={forma.value}>
+                  {forma.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={styles.label}>Monto pagado</label>
+            <input
+              type="number"
+              min="0"
+              max={total}
+              style={styles.input}
+              value={montoPagado}
+              disabled={formaPago === "CUENTA_CORRIENTE"}
+              onChange={(e) => {
+                setMontoPagado(e.target.value);
+                setMontoPagadoManual(true);
+              }}
+            />
+          </div>
+        </div>
+
+        <textarea
+          style={styles.textarea}
+          placeholder="Observaciones de pago (opcional)"
+          value={observacionesPago}
+          onChange={(e) => setObservacionesPago(e.target.value)}
+        />
+
+        <div style={styles.resumenRow}>
+          <span>Saldo pendiente</span>
+          <strong>${saldoPendiente}</strong>
+        </div>
+
         <div style={styles.totalRow}>
           <span>Total</span>
           <strong>${total}</strong>
@@ -511,6 +608,23 @@ const styles = {
     border: "1px solid var(--border-strong)",
     fontSize: 15,
     boxSizing: "border-box",
+  },
+  textarea: {
+    width: "100%",
+    minHeight: 72,
+    padding: 10,
+    borderRadius: 10,
+    border: "1px solid var(--border-strong)",
+    fontSize: 14,
+    boxSizing: "border-box",
+    resize: "vertical",
+    marginBottom: 10,
+  },
+  pagoGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+    marginBottom: 10,
   },
   resultadosCompactos: {
     marginTop: 10,

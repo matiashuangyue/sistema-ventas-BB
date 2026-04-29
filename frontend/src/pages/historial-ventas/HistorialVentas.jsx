@@ -22,6 +22,28 @@ function formatearFecha(fechaIso) {
   });
 }
 
+function formatearFormaPago(formaPago) {
+  const labels = {
+    EFECTIVO: "Efectivo",
+    TRANSFERENCIA: "Transferencia",
+    TARJETA: "Tarjeta",
+    CUENTA_CORRIENTE: "Cuenta corriente",
+    OTRO: "Otro",
+  };
+
+  return labels[formaPago] || "Efectivo";
+}
+
+function formatearEstadoPago(estadoPago) {
+  const labels = {
+    PAGADA: "Pagada",
+    PARCIAL: "Parcial",
+    PENDIENTE: "Pendiente",
+  };
+
+  return labels[estadoPago] || "Pagada";
+}
+
 async function obtenerHistorialVentas({ desde, hasta, cliente }) {
   const params = new URLSearchParams();
 
@@ -226,6 +248,15 @@ export default function HistorialVentas() {
     doc.text("TOTAL:", 140, finalY + 28);
     doc.text(`$${venta.total}`, margenDerecho, finalY + 28, { align: "right" });
 
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Forma de pago: ${formatearFormaPago(venta.formaPago)}`, 14, finalY + 38);
+    doc.text(`Estado: ${formatearEstadoPago(venta.estadoPago)}`, 14, finalY + 44);
+    doc.text(`Pagado: $${venta.montoPagado || 0}`, 140, finalY + 38);
+    doc.text(`Saldo: $${venta.saldoPendiente || 0}`, margenDerecho, finalY + 38, {
+      align: "right",
+    });
+
     // Guardar el PDF
     doc.save(`venta-${venta.id}.pdf`);
   }
@@ -354,6 +385,11 @@ export default function HistorialVentas() {
                 <span>{venta.cantidadItems} ítem(s)</span>
                 <span>{venta.unidadesTotales} unidad(es)</span>
               </div>
+
+              <div style={styles.ventaPago}>
+                <span>{formatearEstadoPago(venta.estadoPago)}</span>
+                <span>Saldo ${venta.saldoPendiente || 0}</span>
+              </div>
             </div>
           ))}
       </div>
@@ -374,6 +410,11 @@ export default function HistorialVentas() {
               <div>
                 <strong>Cliente:</strong>{" "}
                 {ventaDetalle.cliente?.nombre || "Consumidor Final"}
+              </div>
+              <div>
+                <strong>Pago:</strong>{" "}
+                {formatearFormaPago(ventaDetalle.formaPago)} -{" "}
+                {formatearEstadoPago(ventaDetalle.estadoPago)}
               </div>
             </div>
 
@@ -402,6 +443,16 @@ export default function HistorialVentas() {
               <div style={styles.resumenRow}>
                 <span>Descuento</span>
                 <strong>${ventaDetalle.descuento}</strong>
+              </div>
+
+              <div style={styles.resumenRow}>
+                <span>Pagado</span>
+                <strong>${ventaDetalle.montoPagado || 0}</strong>
+              </div>
+
+              <div style={styles.resumenRow}>
+                <span>Saldo pendiente</span>
+                <strong>${ventaDetalle.saldoPendiente || 0}</strong>
               </div>
 
               <div style={styles.totalRow}>
@@ -549,6 +600,13 @@ const styles = {
     gap: 8,
     fontSize: 12,
     color: "var(--text-muted)",
+  },
+  ventaPago: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 8,
+    fontSize: 12,
+    color: "var(--text-soft)",
   },
   overlay: {
     position: "fixed",

@@ -31,6 +31,7 @@ model Cliente {
   createdAt     DateTime @default(now())
 
   ventas Venta[]
+  cobros Cobro[]
 }
 
 model Producto {
@@ -77,16 +78,22 @@ model PrecioVariante {
 }
 
 model Venta {
-  id        Int      @id @default(autoincrement())
-  clienteId Int?
-  fecha     DateTime @default(now())
-  subtotal  Float
-  descuento Float
-  total     Float
-  createdAt DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  clienteId         Int?
+  fecha             DateTime @default(now())
+  subtotal          Float
+  descuento         Float
+  total             Float
+  formaPago         String   @default("EFECTIVO")
+  montoPagado       Float    @default(0)
+  saldoPendiente    Float    @default(0)
+  estadoPago        String   @default("PAGADA")
+  observacionesPago String?
+  createdAt         DateTime @default(now())
 
   cliente Cliente? @relation(fields: [clienteId], references: [id])
   detalles VentaDetalle[]
+  cobros Cobro[]
 }
 
 model VentaDetalle {
@@ -123,4 +130,21 @@ model CompraDetalle {
 
   compra   Compra   @relation(fields: [compraId], references: [id])
   variante Variante @relation(fields: [varianteId], references: [id])
+}
+
+model Cobro {
+  id            Int      @id @default(autoincrement())
+  clienteId     Int?
+  ventaId       Int?
+  fecha         DateTime @default(now())
+  monto         Float
+  formaPago     String
+  observaciones String?
+  createdAt     DateTime @default(now())
+
+  cliente Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  venta   Venta?   @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+
+  @@index([clienteId])
+  @@index([ventaId])
 }

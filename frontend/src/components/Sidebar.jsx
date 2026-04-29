@@ -41,6 +41,7 @@ export default function Sidebar({ open, onClose, onNavigate, active }) {
 const menuItems = [
   { key: "ventas", label: "Ventas" },
   { key: "compras", label: "Historial de Ventas" },
+  { key: "cobranzas", label: "Cobranzas" },
   { key: "productos", label: "Productos" },
   { key: "clientes", label: "Clientes" },
   { key: "reportes", label: "Reportes" },

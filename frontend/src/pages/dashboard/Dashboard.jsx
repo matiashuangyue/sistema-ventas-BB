@@ -26,6 +26,7 @@ export default function Dashboard({ onLogout }) {
         <ul className={styles.list}>
           <li>Productos</li>
           <li>Ventas</li>
+          <li>Cobranzas</li>
           <li>Compras</li>
         </ul>
       </section>

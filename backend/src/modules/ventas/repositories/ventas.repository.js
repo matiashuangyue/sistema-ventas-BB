@@ -2,6 +2,11 @@ const prisma = require("../../../lib/prisma");
 
 const ventaIncludeDetalle = {
   cliente: true,
+  cobros: {
+    orderBy: {
+      fecha: "desc",
+    },
+  },
   detalles: {
     include: {
       variante: {
@@ -25,9 +30,19 @@ function createVentaDetalle(client, data) {
   return client.ventaDetalle.create({ data });
 }
 
+function createCobro(client, data) {
+  return client.cobro.create({ data });
+}
+
 function deleteVenta(client, id) {
   return client.venta.delete({
     where: { id },
+  });
+}
+
+function deleteCobrosByVentaId(client, ventaId) {
+  return client.cobro.deleteMany({
+    where: { ventaId },
   });
 }
 
@@ -67,10 +82,18 @@ function findVentaById(id) {
   });
 }
 
+function findVentaByIdInTransaction(client, id) {
+  return client.venta.findUnique({
+    where: { id },
+    include: ventaIncludeDetalle,
+  });
+}
+
 function findVentaWithDetalles(client, id) {
   return client.venta.findUnique({
     where: { id },
     include: {
+      cobros: true,
       detalles: true,
     },
   });
@@ -111,13 +134,16 @@ function updateVenta(client, id, data) {
 }
 
 module.exports = {
+  createCobro,
   createVenta,
   createVentaDetalle,
+  deleteCobrosByVentaId,
   deleteVenta,
   deleteVentaDetalles,
   findPreciosDisponibles,
   findVariante,
   findVentaById,
+  findVentaByIdInTransaction,
   findVentaWithDetalles,
   findVentas,
   findVentasHistorial,
