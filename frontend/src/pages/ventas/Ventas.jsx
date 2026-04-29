@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getToken } from "../services/auth";
-import { API_URL as API } from "../config/api";
+import { getToken } from "../../services/auth";
+import { API_URL as API } from "../../config/api";
 
 export default function Ventas() {
   const token = getToken();
@@ -493,8 +493,8 @@ const styles = {
     margin: 0,
   },
   bloque: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 12,
     padding: 14,
   },
@@ -502,13 +502,13 @@ const styles = {
     display: "block",
     fontSize: 14,
     marginBottom: 6,
-    color: "#374151",
+    color: "var(--text-soft)",
   },
   input: {
     width: "100%",
     padding: 10,
     borderRadius: 10,
-    border: "1px solid #d1d5db",
+    border: "1px solid var(--border-strong)",
     fontSize: 15,
     boxSizing: "border-box",
   },
@@ -523,54 +523,19 @@ const styles = {
     gridTemplateColumns: "1fr auto 1.6fr 70px auto auto",
     gap: 8,
     alignItems: "center",
-    borderBottom: "1px solid #f1f5f9",
+    borderBottom: "1px solid var(--border-subtle)",
     paddingBottom: 8,
   },
   resultadoNombre: {
     fontWeight: 600,
     fontSize: 14,
   },
-  resultadoStock: {
-    fontSize: 12,
-    color: "#4b5563",
-    whiteSpace: "nowrap",
-  },
-  resultadoEscalas: {
-    fontSize: 12,
-    color: "#6b7280",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  inputCantidadBusqueda: {
-    width: "100%",
-    padding: 6,
-    borderRadius: 8,
-    border: "1px solid #d1d5db",
-    textAlign: "center",
-    boxSizing: "border-box",
-  },
-  resultadoPrecioAplicado: {
-    fontSize: 12,
-    fontWeight: 600,
-    whiteSpace: "nowrap",
-  },
-  btnAgregar: {
-    border: "none",
-    borderRadius: 8,
-    background: "#2563eb",
-    color: "#fff",
-    width: 34,
-    height: 34,
-    fontSize: 18,
-    fontWeight: 700,
-  },
   empty: {
     margin: 0,
-    color: "#6b7280",
+    color: "var(--text-muted)",
   },
   carritoCard: {
-  borderBottom: "1px solid #f1f5f9",
+  borderBottom: "1px solid var(--border-subtle)",
   padding: "10px 0",
   display: "flex",
   flexDirection: "column",
@@ -601,7 +566,7 @@ carritoLinea2: {
 
 carritoEscala: {
   textAlign: "left",
-  color: "#374151",
+  color: "var(--text-soft)",
   fontSize: 13,
 },
 
@@ -614,7 +579,7 @@ carritoCantidad: {
   width: "100%",
   padding: 6,
   borderRadius: 8,
-  border: "1px solid #d1d5db",
+  border: "1px solid var(--border-strong)",
   textAlign: "center",
   boxSizing: "border-box",
 },
@@ -642,7 +607,7 @@ btnDelete: {
     width: 100,
     padding: 8,
     borderRadius: 8,
-    border: "1px solid #d1d5db",
+    border: "1px solid var(--border-strong)",
     textAlign: "right",
   },
   totalRow: {
@@ -658,13 +623,13 @@ btnDelete: {
     padding: 14,
     border: "none",
     borderRadius: 12,
-    background: "#16a34a",
-    color: "#fff",
+    background: "var(--success)",
+    color: "var(--text-inverse)",
     fontSize: 16,
     fontWeight: 700,
   },
   resultadoCard: {
-  borderBottom: "1px solid #f1f5f9",
+  borderBottom: "1px solid var(--border-subtle)",
   padding: "8px 0",
   display: "flex",
   flexDirection: "column",
@@ -687,7 +652,7 @@ resultadoNombreCompleto: {
 
 resultadoStock: {
   fontSize: 12,
-  color: "#4b5563",
+  color: "var(--text-soft)",
   whiteSpace: "nowrap",
 },
 
@@ -700,7 +665,7 @@ resultadoLinea2: {
 
 resultadoEscalas: {
   fontSize: 12,
-  color: "#6b7280",
+  color: "var(--text-muted)",
   display: "flex",
   flexWrap: "wrap",
   gap: 6,
@@ -714,7 +679,7 @@ inputCantidadBusqueda: {
   width: "100%",
   padding: 6,
   borderRadius: 8,
-  border: "1px solid #d1d5db",
+  border: "1px solid var(--border-strong)",
   textAlign: "center",
   boxSizing: "border-box",
 },
@@ -728,8 +693,8 @@ resultadoPrecioAplicado: {
 btnAgregar: {
   border: "none",
   borderRadius: 8,
-  background: "#2563eb",
-  color: "#fff",
+  background: "var(--primary)",
+  color: "var(--text-inverse)",
   width: 34,
   height: 34,
   fontSize: 18,
@@ -738,8 +703,8 @@ btnAgregar: {
 clienteSeleccionadoBox: {
   marginTop: 10,
   padding: 10,
-  border: "1px solid #d1fae5",
-  background: "#ecfdf5",
+  border: "1px solid var(--border-success)",
+  background: "var(--surface-success)",
   borderRadius: 10,
   display: "flex",
   justifyContent: "space-between",
@@ -749,8 +714,8 @@ clienteSeleccionadoBox: {
 
 btnQuitarCliente: {
   border: "none",
-  background: "#dc2626",
-  color: "#fff",
+  background: "var(--danger)",
+  color: "var(--text-inverse)",
   padding: "8px 10px",
   borderRadius: 8,
   fontSize: 12,
@@ -758,15 +723,15 @@ btnQuitarCliente: {
 
 clientesDropdown: {
   marginTop: 8,
-  border: "1px solid #e5e7eb",
+  border: "1px solid var(--border)",
   borderRadius: 10,
   overflow: "hidden",
-  background: "#fff",
+  background: "var(--surface)",
 },
 
 clienteItem: {
   padding: 10,
-  borderBottom: "1px solid #f3f4f6",
+  borderBottom: "1px solid var(--border-subtle)",
   cursor: "pointer",
 },
 
@@ -777,13 +742,13 @@ clienteNombre: {
 
 clienteExtra: {
   fontSize: 12,
-  color: "#6b7280",
+  color: "var(--text-muted)",
   marginTop: 2,
 },
 
 clienteFallback: {
   marginTop: 8,
   fontSize: 12,
-  color: "#6b7280",
+  color: "var(--text-muted)",
 },
 };

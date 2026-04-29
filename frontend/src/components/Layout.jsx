@@ -2,6 +2,7 @@ import { useState } from "react";
 import Topbar from "./Topbar";
 import Sidebar from "./Sidebar";
 import { getUser, logout } from "../services/auth";
+import styles from "./Layout.module.css";
 
 export default function Layout({
   children,
@@ -18,7 +19,7 @@ export default function Layout({
   };
 
   return (
-    <div>
+    <div className={styles.shell}>
       <Topbar
         onMenuToggle={() => setMenuOpen(true)}
         user={user}
@@ -32,9 +33,7 @@ export default function Layout({
         onNavigate={onNavigate}
       />
 
-      <div style={{ marginTop: 60, padding: 20 }}>
-        {children}
-      </div>
+      <main className={styles.content}>{children}</main>
     </div>
   );
 }

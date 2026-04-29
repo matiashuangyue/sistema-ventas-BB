@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { API_URL as API } from "../config/api";
+import { API_URL as API } from "../../config/api";
+
+async function obtenerDashboard({ desde = "", hasta = "" } = {}) {
+  const params = new URLSearchParams();
+  if (desde) params.append("desde", desde);
+  if (hasta) params.append("hasta", hasta);
+
+  const res = await fetch(`${API}/reportes/dashboard?${params.toString()}`);
+  return res.json();
+}
 
 export default function Reportes() {
   const [desde, setDesde] = useState("");
@@ -10,17 +19,36 @@ export default function Reportes() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    cargarReportes();
+    let cancelado = false;
+
+    async function cargarReporteInicial() {
+      try {
+        setLoading(true);
+        const result = await obtenerDashboard();
+
+        if (!cancelado) {
+          setData(result);
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (!cancelado) {
+          setLoading(false);
+        }
+      }
+    }
+
+    cargarReporteInicial();
+
+    return () => {
+      cancelado = true;
+    };
   }, []);
 
   async function cargarReportes() {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (desde) params.append("desde", desde);
-      if (hasta) params.append("hasta", hasta);
-      const res = await fetch(`${API}/reportes/dashboard?${params.toString()}`);
-      const result = await res.json();
+      const result = await obtenerDashboard({ desde, hasta });
       setData(result);
     } catch (error) {
       console.error(error);
@@ -56,7 +84,7 @@ export default function Reportes() {
         <h2 style={styles.title}>Reportes</h2>
         {data && (
           <button style={styles.btnPdf} onClick={descargarReportePDF}>
-            📥 <span className="hide-mobile">PDF</span>
+            PDF
           </button>
         )}
       </div>
@@ -94,7 +122,7 @@ export default function Reportes() {
             </div>
             <div style={styles.card}>
               <span style={styles.cardLabel}>Promedio</span>
-              <strong style={{...styles.cardValue, color: '#2563eb'}}>${Math.round(data.resumen.promedio).toLocaleString()}</strong>
+              <strong style={{...styles.cardValue, color: 'var(--primary)'}}>${Math.round(data.resumen.promedio).toLocaleString()}</strong>
             </div>
           </div>
 
@@ -135,7 +163,7 @@ const styles = {
   container: { display: "flex", flexDirection: "column", gap: 12, paddingBottom: 20 },
   headerFlex: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   title: { margin: 0, fontSize: 20 },
-  bloque: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 },
+  bloque: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 12 },
   
   // Filtros: se adaptan a 1 columna en móvil si el ancho es poco
   filtrosGrid: { 
@@ -145,14 +173,14 @@ const styles = {
     marginBottom: 12
   },
   inputGroup: { display: 'flex', flexDirection: 'column' },
-  label: { fontSize: 13, marginBottom: 4, color: "#4b5563", fontWeight: '500' },
-  input: { padding: 10, borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14 },
+  label: { fontSize: 13, marginBottom: 4, color: "var(--text-soft)", fontWeight: '500' },
+  input: { padding: 10, borderRadius: 8, border: "1px solid var(--border-strong)", fontSize: 14 },
   
   btnPrincipalFull: { 
-    width: '100%', border: "none", borderRadius: 8, background: "#2563eb", 
-    color: "#fff", padding: "12px", fontWeight: 600, cursor: 'pointer' 
+    width: '100%', border: "none", borderRadius: 8, background: "var(--primary)", 
+    color: "var(--text-inverse)", padding: "12px", fontWeight: 600, cursor: 'pointer' 
   },
-  btnPdf: { background: '#fff', border: '1px solid #d1d5db', padding: '8px 12px', borderRadius: 8 },
+  btnPdf: { background: 'var(--surface)', border: '1px solid var(--border-strong)', padding: '8px 12px', borderRadius: 8 },
 
   // Tarjetas: En celu ocupan todo el ancho, en tablet/PC se ponen de a 3
   gridCards: { 
@@ -160,18 +188,18 @@ const styles = {
     gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", 
     gap: 10 
   },
-  card: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 16 },
-  cardLabel: { fontSize: 11, color: "#6b7280", textTransform: 'uppercase', letterSpacing: '0.5px' },
-  cardValue: { fontSize: 18, color: "#111827", fontWeight: 800, display: 'block', marginTop: 4 },
+  card: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 },
+  cardLabel: { fontSize: 11, color: "var(--text-muted)", textTransform: 'uppercase', letterSpacing: '0.5px' },
+  cardValue: { fontSize: 18, color: "var(--text)", fontWeight: 800, display: 'block', marginTop: 4 },
 
-  subTitle: { margin: "0 0 10px 0", fontSize: 15, color: '#374151', fontWeight: '700' },
+  subTitle: { margin: "0 0 10px 0", fontSize: 15, color: 'var(--text-soft)', fontWeight: '700' },
   filaRanking: { 
     display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-    padding: '10px 0', borderBottom: '1px solid #f3f4f6' 
+    padding: '10px 0', borderBottom: '1px solid var(--border-subtle)' 
   },
-  prodNombre: { fontSize: 14, fontWeight: '600', color: '#1f2937' },
-  prodSub: { fontSize: 12, color: '#6b7280' },
-  montoRanking: { fontWeight: '700', color: '#059669', fontSize: 14, marginLeft: 10 },
-  badge: { background: '#f3f4f6', padding: '2px 6px', borderRadius: 4, fontSize: 10, marginRight: 8, color: '#4b5563' },
-  empty: { textAlign: 'center', padding: 20, color: '#6b7280' }
+  prodNombre: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
+  prodSub: { fontSize: 12, color: 'var(--text-muted)' },
+  montoRanking: { fontWeight: '700', color: 'var(--success)', fontSize: 14, marginLeft: 10 },
+  badge: { background: 'var(--surface-muted)', padding: '2px 6px', borderRadius: 4, fontSize: 10, marginRight: 8, color: 'var(--text-soft)' },
+  empty: { textAlign: 'center', padding: 20, color: 'var(--text-muted)' }
 };

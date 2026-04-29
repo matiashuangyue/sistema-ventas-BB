@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { getToken } from "../services/auth";
-import { API_URL as API } from "../config/api";
+import { getToken } from "../../services/auth";
+import { API_URL as API } from "../../config/api";
 
 export default function Productos() {
   const token = getToken();
 
   const [variantes, setVariantes] = useState([]);
   const [busqueda, setBusqueda] = useState("");
+  const [productoFiltroId, setProductoFiltroId] = useState("");
 
   const [stockModalOpen, setStockModalOpen] = useState(false);
   const [varianteSeleccionada, setVarianteSeleccionada] = useState(null);
@@ -42,6 +43,13 @@ export default function Productos() {
   const [editarNombre, setEditarNombre] = useState("");
   const [editarStockMinimo, setEditarStockMinimo] = useState("");
   const [editarProductoId, setEditarProductoId] = useState("");
+
+  const [precioProductoModalOpen, setPrecioProductoModalOpen] = useState(false);
+  const [precioProductoId, setPrecioProductoId] = useState("");
+  const [precioProductoListaId, setPrecioProductoListaId] = useState("");
+  const [precioProductoCantidadMinima, setPrecioProductoCantidadMinima] = useState("");
+  const [precioProductoValor, setPrecioProductoValor] = useState("");
+  const [precioProductoBusqueda, setPrecioProductoBusqueda] = useState("");
   
 
   useEffect(() => {
@@ -129,16 +137,68 @@ async function guardarEdicionVariante() {
     }
   }
 
+  const productosDisponibles = useMemo(() => {
+    const productos = new Map();
+
+    variantes.forEach((variante) => {
+      if (!variante.productoId || !variante.producto?.nombre) return;
+
+      productos.set(variante.productoId, {
+        id: variante.productoId,
+        nombre: variante.producto.nombre,
+      });
+    });
+
+    return Array.from(productos.values()).sort((a, b) =>
+      a.nombre.localeCompare(b.nombre)
+    );
+  }, [variantes]);
+
   const variantesFiltradas = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
-
-    if (!texto) return variantes;
+    const productoId = productoFiltroId ? Number(productoFiltroId) : null;
 
     return variantes.filter((v) => {
+      const coincideProducto = !productoId || v.productoId === productoId;
       const completo = `${v.producto?.nombre || ""} ${v.nombre}`.toLowerCase();
-      return completo.includes(texto);
+      const coincideTexto = !texto || completo.includes(texto);
+
+      return coincideProducto && coincideTexto;
     });
-  }, [variantes, busqueda]);
+  }, [variantes, busqueda, productoFiltroId]);
+
+  const productosPrecioFiltrados = useMemo(() => {
+    const texto = precioProductoBusqueda.trim().toLowerCase();
+
+    return productosBase
+      .filter((producto) => {
+        const nombre = producto.nombre?.toLowerCase() || "";
+        const categoria = producto.categoria?.toLowerCase() || "";
+        return !texto || `${nombre} ${categoria}`.includes(texto);
+      })
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [productosBase, precioProductoBusqueda]);
+
+  const productoPrecioSeleccionado = useMemo(
+    () =>
+      productosBase.find(
+        (producto) => producto.id === Number(precioProductoId)
+      ),
+    [productosBase, precioProductoId]
+  );
+
+  const cantidadVariantesPrecioProducto = useMemo(() => {
+    if (!precioProductoId) return 0;
+
+    return variantes.filter(
+      (variante) => variante.productoId === Number(precioProductoId)
+    ).length;
+  }, [variantes, precioProductoId]);
+
+  function limpiarFiltrosProductos() {
+    setBusqueda("");
+    setProductoFiltroId("");
+  }
 
   function abrirModalStock(variante) {
     setVarianteSeleccionada(variante);
@@ -348,6 +408,66 @@ function cerrarModalPrecios() {
   setNuevoPrecioValor("");
 }
 
+async function abrirModalPrecioProducto() {
+  await Promise.all([cargarProductosBase(), cargarListasPrecio()]);
+
+  setPrecioProductoId("");
+  setPrecioProductoListaId("");
+  setPrecioProductoCantidadMinima("");
+  setPrecioProductoValor("");
+  setPrecioProductoBusqueda("");
+  setPrecioProductoModalOpen(true);
+}
+
+function cerrarModalPrecioProducto() {
+  setPrecioProductoModalOpen(false);
+  setPrecioProductoId("");
+  setPrecioProductoListaId("");
+  setPrecioProductoCantidadMinima("");
+  setPrecioProductoValor("");
+  setPrecioProductoBusqueda("");
+}
+
+async function guardarPrecioProducto() {
+  if (
+    !precioProductoId ||
+    !precioProductoListaId ||
+    !precioProductoCantidadMinima ||
+    !precioProductoValor
+  ) {
+    alert("Completa todos los campos");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/precios-variantes/por-producto`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        productoId: Number(precioProductoId),
+        listaPrecioId: Number(precioProductoListaId),
+        cantidadMinima: Number(precioProductoCantidadMinima),
+        precio: Number(precioProductoValor),
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Error actualizando precios por producto");
+    }
+
+    await cargarVariantes();
+    cerrarModalPrecioProducto();
+    alert(`Precios actualizados en ${data.variantesActualizadas} variantes`);
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+  }
+}
+
 async function guardarPrecio() {
   if (
     !variantePreciosSeleccionada ||
@@ -450,6 +570,13 @@ async function guardarPrecio() {
         <div style={styles.headerActions}>
             <button
             style={styles.btnSecundario}
+            onClick={abrirModalPrecioProducto}
+            >
+            Precio por producto
+            </button>
+
+            <button
+            style={styles.btnSecundario}
             onClick={abrirModalVariante}
             >
             + Nueva variante
@@ -465,13 +592,45 @@ async function guardarPrecio() {
       </div>
 
       <div style={styles.bloque}>
-        <label style={styles.label}>Buscar producto o variante</label>
-        <input
-          style={styles.input}
-          placeholder="Ej: Lavanda, Textil, Oreo..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
+        <div style={styles.filtrosGrid}>
+          <div>
+            <label style={styles.label}>Buscar producto o variante</label>
+            <input
+              style={styles.input}
+              placeholder="Ej: Lavanda, Textil, Oreo..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Filtrar por producto</label>
+            <select
+              style={styles.input}
+              value={productoFiltroId}
+              onChange={(e) => setProductoFiltroId(e.target.value)}
+            >
+              <option value="">Todos los productos</option>
+              {productosDisponibles.map((producto) => (
+                <option key={producto.id} value={producto.id}>
+                  {producto.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            style={styles.btnFiltro}
+            onClick={limpiarFiltrosProductos}
+            type="button"
+          >
+            Limpiar
+          </button>
+        </div>
+
+        <div style={styles.filtroResumen}>
+          {variantesFiltradas.length} de {variantes.length} variantes visibles
+        </div>
       </div>
 
       <div style={styles.lista}>
@@ -490,8 +649,8 @@ async function guardarPrecio() {
                 style={{
                   ...styles.stock,
                   color: variante.stock <= (variante.stockMinimo || 0)
-                    ? "#dc2626"
-                    : "#111827",
+                    ? "var(--danger)"
+                    : "var(--text)",
                 }}
               >
                 Stock: {variante.stock}
@@ -570,6 +729,99 @@ async function guardarPrecio() {
               </button>
             </div>
           </div>
+        </>
+      )}
+
+      {precioProductoModalOpen && (
+        <>
+            <div style={styles.overlay} onClick={cerrarModalPrecioProducto}></div>
+
+            <div style={styles.modal}>
+            <h3 style={styles.modalTitle}>Actualizar precios por producto</h3>
+
+            <label style={styles.label}>Buscar producto</label>
+            <input
+                style={styles.input}
+                placeholder="Ej: Saphirus Textil..."
+                value={precioProductoBusqueda}
+                onChange={(e) => setPrecioProductoBusqueda(e.target.value)}
+            />
+
+            <label style={styles.label}>Producto</label>
+            <select
+                style={styles.input}
+                value={precioProductoId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const producto = productosBase.find(
+                    (item) => item.id === Number(id)
+                  );
+
+                  setPrecioProductoId(id);
+                  if (producto) setPrecioProductoBusqueda(producto.nombre);
+                }}
+            >
+                <option value="">Seleccionar producto</option>
+                {productosPrecioFiltrados.map((producto) => (
+                <option key={producto.id} value={producto.id}>
+                    {producto.nombre}
+                </option>
+                ))}
+            </select>
+
+            {productoPrecioSeleccionado && (
+              <div style={styles.precioProductoInfo}>
+                <strong>{productoPrecioSeleccionado.nombre}</strong>
+                <span>
+                  Se actualizaran {cantidadVariantesPrecioProducto} variantes.
+                </span>
+              </div>
+            )}
+
+            <label style={styles.label}>Lista de precio</label>
+            <select
+                style={styles.input}
+                value={precioProductoListaId}
+                onChange={(e) => setPrecioProductoListaId(e.target.value)}
+            >
+                <option value="">Seleccionar lista</option>
+                {listasPrecio.map((lista) => (
+                <option key={lista.id} value={lista.id}>
+                    {lista.nombre}
+                </option>
+                ))}
+            </select>
+
+            <label style={styles.label}>Cantidad minima</label>
+            <input
+                type="number"
+                min="1"
+                style={styles.input}
+                placeholder="Cantidad minima"
+                value={precioProductoCantidadMinima}
+                onChange={(e) => setPrecioProductoCantidadMinima(e.target.value)}
+            />
+
+            <label style={styles.label}>Precio</label>
+            <input
+                type="number"
+                min="0"
+                style={styles.input}
+                placeholder="Precio"
+                value={precioProductoValor}
+                onChange={(e) => setPrecioProductoValor(e.target.value)}
+            />
+
+            <div style={styles.modalActions}>
+                <button style={styles.btnSecundario} onClick={cerrarModalPrecioProducto}>
+                Cancelar
+                </button>
+
+                <button style={styles.btnNuevo} onClick={guardarPrecioProducto}>
+                Actualizar
+                </button>
+            </div>
+            </div>
         </>
       )}
       
@@ -877,30 +1129,50 @@ const styles = {
   btnNuevo: {
     border: "none",
     borderRadius: 10,
-    background: "#2563eb",
-    color: "#fff",
+    background: "var(--primary)",
+    color: "var(--text-inverse)",
     padding: "10px 12px",
     fontWeight: 600,
   },
   bloque: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 12,
     padding: 14,
+  },
+  filtrosGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 10,
+    alignItems: "end",
   },
   label: {
     display: "block",
     fontSize: 14,
     marginBottom: 6,
-    color: "#374151",
+    color: "var(--text-soft)",
   },
   input: {
     width: "100%",
     padding: 10,
     borderRadius: 10,
-    border: "1px solid #d1d5db",
+    border: "1px solid var(--border-strong)",
     fontSize: 15,
     boxSizing: "border-box",
+  },
+  btnFiltro: {
+    border: "1px solid var(--border-strong)",
+    borderRadius: 10,
+    background: "var(--surface)",
+    color: "var(--text)",
+    padding: "10px 12px",
+    fontWeight: 600,
+    minHeight: 42,
+  },
+  filtroResumen: {
+    marginTop: 10,
+    color: "var(--text-muted)",
+    fontSize: 13,
   },
   lista: {
     display: "flex",
@@ -908,15 +1180,15 @@ const styles = {
     gap: 12,
   },
   empty: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 12,
     padding: 14,
-    color: "#6b7280",
+    color: "var(--text-muted)",
   },
   card: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 12,
     padding: 14,
     display: "flex",
@@ -945,15 +1217,11 @@ const styles = {
     gap: 6,
   },
   escala: {
-    background: "#f3f4f6",
+    background: "var(--surface-muted)",
     borderRadius: 999,
     padding: "4px 8px",
     fontSize: 12,
     whiteSpace: "nowrap",
-  },
-  sinPrecios: {
-    fontSize: 12,
-    color: "#6b7280",
   },
   linea3: {
     display: "flex",
@@ -963,23 +1231,23 @@ const styles = {
   btnStock: {
     border: "none",
     borderRadius: 10,
-    background: "#16a34a",
-    color: "#fff",
+    background: "var(--success)",
+    color: "var(--text-inverse)",
     padding: "9px 12px",
     fontWeight: 600,
   },
   btnSecundario: {
-    border: "1px solid #d1d5db",
+    border: "1px solid var(--border-strong)",
     borderRadius: 10,
-    background: "#fff",
-    color: "#111827",
+    background: "var(--surface)",
+    color: "var(--text)",
     padding: "9px 12px",
     fontWeight: 600,
   },
   overlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.35)",
+    background: "rgba(15, 23, 42, 0.46)",
     zIndex: 999,
   },
   modal: {
@@ -989,7 +1257,7 @@ const styles = {
     transform: "translate(-50%, -50%)",
     width: "90%",
     maxWidth: 420,
-    background: "#fff",
+    background: "var(--surface)",
     borderRadius: 14,
     padding: 18,
     zIndex: 1000,
@@ -1006,7 +1274,18 @@ const styles = {
   },
   modalStockActual: {
     fontSize: 14,
-    color: "#374151",
+    color: "var(--text-soft)",
+  },
+  precioProductoInfo: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    border: "1px solid var(--border)",
+    borderRadius: 10,
+    background: "var(--surface-selected)",
+    color: "var(--text-soft)",
+    padding: 10,
+    fontSize: 13,
   },
   modalActions: {
     display: "flex",
@@ -1017,7 +1296,7 @@ const styles = {
   display: "flex",
   flexDirection: "column",
   gap: 8,
-  border: "1px solid #e5e7eb",
+  border: "1px solid var(--border)",
   borderRadius: 10,
   padding: 10,
   maxHeight: 180,
@@ -1030,17 +1309,17 @@ precioFila: {
   alignItems: "center",
   gap: 8,
   fontSize: 14,
-  borderBottom: "1px solid #f3f4f6",
+  borderBottom: "1px solid var(--border-subtle)",
   paddingBottom: 6,
 },
 
 sinPrecios: {
   fontSize: 13,
-  color: "#6b7280",
+  color: "var(--text-muted)",
 },
 precioListaNombre: {
   fontSize: 13,
-  color: "#374151",
+  color: "var(--text-soft)",
 },
 
 precioAcciones: {
@@ -1053,38 +1332,38 @@ inputPrecioMini: {
   width: 90,
   padding: 6,
   borderRadius: 8,
-  border: "1px solid #d1d5db",
+  border: "1px solid var(--border-strong)",
   fontSize: 13,
   boxSizing: "border-box",
 },
 
 btnMiniEditar: {
-  border: "1px solid #d1d5db",
-  background: "#fff",
+  border: "1px solid var(--border-strong)",
+  background: "var(--surface)",
   borderRadius: 8,
   padding: "4px 8px",
   cursor: "pointer",
 },
 
 btnMiniEliminar: {
-  border: "1px solid #fecaca",
-  background: "#fff5f5",
+  border: "1px solid var(--border-danger)",
+  background: "var(--surface-danger)",
   borderRadius: 8,
   padding: "4px 8px",
   cursor: "pointer",
 },
 
 btnMiniGuardar: {
-  border: "1px solid #bbf7d0",
-  background: "#f0fdf4",
+  border: "1px solid var(--border-success)",
+  background: "var(--surface-success)",
   borderRadius: 8,
   padding: "4px 8px",
   cursor: "pointer",
 },
 
 btnMiniCancelar: {
-  border: "1px solid #e5e7eb",
-  background: "#fff",
+  border: "1px solid var(--border)",
+  background: "var(--surface)",
   borderRadius: 8,
   padding: "4px 8px",
   cursor: "pointer",

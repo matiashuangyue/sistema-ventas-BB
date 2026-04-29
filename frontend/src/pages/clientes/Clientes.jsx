@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { API_URL as API } from "../config/api";
+import { API_URL as API } from "../../config/api";
 
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
@@ -211,21 +211,21 @@ const styles = {
   container: { display: "flex", flexDirection: "column", gap: 16 },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   title: { margin: 0, fontSize: 20 },
-  bloque: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 },
-  input: { width: "100%", padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 15, boxSizing: "border-box" },
-  textarea: { width: "100%", minHeight: 80, padding: 10, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 15, boxSizing: "border-box", resize: "none" },
+  bloque: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 12 },
+  input: { width: "100%", padding: 12, borderRadius: 10, border: "1px solid var(--border-strong)", fontSize: 15, boxSizing: "border-box" },
+  textarea: { width: "100%", minHeight: 80, padding: 10, borderRadius: 10, border: "1px solid var(--border-strong)", fontSize: 15, boxSizing: "border-box", resize: "none" },
   lista: { display: "flex", flexDirection: "column", gap: 10 },
-  card: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 8 },
+  card: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 8 },
   linea1: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  nombre: { fontWeight: 700, fontSize: 16, color: "#111827" },
-  datosGrid: { display: "flex", flexDirection: "column", gap: 4, fontSize: 13, color: "#4b5563" },
+  nombre: { fontWeight: 700, fontSize: 16, color: "var(--text)" },
+  datosGrid: { display: "flex", flexDirection: "column", gap: 4, fontSize: 13, color: "var(--text-soft)" },
   dato: { lineHeight: "1.4" },
-  observaciones: { fontSize: 12, color: "#6b7280", borderTop: "1px solid #f3f4f6", paddingTop: 8, marginTop: 4 },
-  btnNuevo: { border: "none", borderRadius: 10, background: "#2563eb", color: "#fff", padding: "10px 16px", fontWeight: 600, cursor: "pointer" },
-  btnEditar: { border: "1px solid #d1d5db", borderRadius: 8, background: "#fff", color: "#374151", padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
-  btnSecundario: { border: "1px solid #d1d5db", borderRadius: 10, background: "#fff", padding: "10px 16px", fontWeight: 600, cursor: "pointer" },
-  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 999 },
-  modal: { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "90%", maxWidth: 450, background: "#fff", borderRadius: 16, padding: 20, zIndex: 1000, display: "flex", flexDirection: "column", gap: 12, maxHeight: "90vh", overflowY: "auto" },
+  observaciones: { fontSize: 12, color: "var(--text-muted)", borderTop: "1px solid var(--border-subtle)", paddingTop: 8, marginTop: 4 },
+  btnNuevo: { border: "none", borderRadius: 10, background: "var(--primary)", color: "var(--text-inverse)", padding: "10px 16px", fontWeight: 600, cursor: "pointer" },
+  btnEditar: { border: "1px solid var(--border-strong)", borderRadius: 8, background: "var(--surface)", color: "var(--text-soft)", padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  btnSecundario: { border: "1px solid var(--border-strong)", borderRadius: 10, background: "var(--surface)", padding: "10px 16px", fontWeight: 600, cursor: "pointer" },
+  overlay: { position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.46)", zIndex: 999 },
+  modal: { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "90%", maxWidth: 450, background: "var(--surface)", borderRadius: 16, padding: 20, zIndex: 1000, display: "flex", flexDirection: "column", gap: 12, maxHeight: "90vh", overflowY: "auto" },
   modalTitle: { margin: "0 0 8px 0", fontSize: 18 },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 },
 };

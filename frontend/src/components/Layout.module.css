@@ -1,0 +1,15 @@
+.shell {
+  min-height: 100vh;
+}
+
+.content {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: calc(var(--topbar-height) + 20px) 20px 28px;
+}
+
+@media (max-width: 720px) {
+  .content {
+    padding: calc(var(--topbar-height) + 14px) 12px 18px;
+  }
+}

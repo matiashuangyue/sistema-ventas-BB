@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { API_URL as API } from "../config/api";
+import { API_URL as API } from "../../config/api";
 
 function getFechaHoy() {
   const hoy = new Date();
@@ -22,6 +22,23 @@ function formatearFecha(fechaIso) {
   });
 }
 
+async function obtenerHistorialVentas({ desde, hasta, cliente }) {
+  const params = new URLSearchParams();
+
+  if (desde) params.append("desde", desde);
+  if (hasta) params.append("hasta", hasta);
+  if (cliente.trim()) params.append("cliente", cliente.trim());
+
+  const res = await fetch(`${API}/ventas/historial?${params.toString()}`);
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.error || "Error cargando historial");
+  }
+
+  return data;
+}
+
 export default function HistorialVentas() {
   const [cliente, setCliente] = useState("");
   const [desde, setDesde] = useState(getFechaHace7Dias());
@@ -35,26 +52,41 @@ export default function HistorialVentas() {
   const [detalleOpen, setDetalleOpen] = useState(false);
 
   useEffect(() => {
-    cargarVentas();
+    let cancelado = false;
+
+    async function cargarVentasIniciales() {
+      try {
+        setLoading(true);
+        const data = await obtenerHistorialVentas({
+          desde: getFechaHace7Dias(),
+          hasta: getFechaHoy(),
+          cliente: "",
+        });
+
+        if (!cancelado) {
+          setVentas(data);
+        }
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+      } finally {
+        if (!cancelado) {
+          setLoading(false);
+        }
+      }
+    }
+
+    cargarVentasIniciales();
+
+    return () => {
+      cancelado = true;
+    };
   }, []);
 
   async function cargarVentas() {
     try {
       setLoading(true);
-
-      const params = new URLSearchParams();
-
-      if (desde) params.append("desde", desde);
-      if (hasta) params.append("hasta", hasta);
-      if (cliente.trim()) params.append("cliente", cliente.trim());
-
-      const res = await fetch(`${API}/ventas/historial?${params.toString()}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Error cargando historial");
-      }
-
+      const data = await obtenerHistorialVentas({ desde, hasta, cliente });
       setVentas(data);
     } catch (error) {
       console.error(error);
@@ -416,8 +448,8 @@ const styles = {
     margin: 0,
   },
   bloque: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 12,
     padding: 14,
   },
@@ -430,13 +462,13 @@ const styles = {
     display: "block",
     fontSize: 14,
     marginBottom: 6,
-    color: "#374151",
+    color: "var(--text-soft)",
   },
   input: {
     width: "100%",
     padding: 10,
     borderRadius: 10,
-    border: "1px solid #d1d5db",
+    border: "1px solid var(--border-strong)",
     fontSize: 15,
     boxSizing: "border-box",
   },
@@ -445,7 +477,7 @@ const styles = {
     paddingRight: 12,
     appearance: "none",
     WebkitAppearance: "none",
-    backgroundColor: "#fff",
+    backgroundColor: "var(--surface)",
   },
   filtrosActions: {
     display: "flex",
@@ -456,24 +488,24 @@ const styles = {
   btnPrincipal: {
     border: "none",
     borderRadius: 10,
-    background: "#2563eb",
-    color: "#fff",
+    background: "var(--primary)",
+    color: "var(--text-inverse)",
     padding: "10px 14px",
     fontWeight: 600,
   },
   btnSecundario: {
-    border: "1px solid #d1d5db",
+    border: "1px solid var(--border-strong)",
     borderRadius: 10,
-    background: "#fff",
-    color: "#111827",
+    background: "var(--surface)",
+    color: "var(--text)",
     padding: "10px 14px",
     fontWeight: 600,
   },
   btnDanger: {
-    border: "1px solid #ef4444",
+    border: "1px solid var(--border-danger)",
     borderRadius: 10,
-    background: "#fff5f5",
-    color: "#b91c1c",
+    background: "var(--surface-danger)",
+    color: "var(--danger)",
     padding: "10px 14px",
     fontWeight: 600,
   },
@@ -483,15 +515,15 @@ const styles = {
     gap: 10,
   },
   empty: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 12,
     padding: 14,
-    color: "#6b7280",
+    color: "var(--text-muted)",
   },
   ventaFila: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 12,
     padding: 14,
     display: "flex",
@@ -516,12 +548,12 @@ const styles = {
     justifyContent: "space-between",
     gap: 8,
     fontSize: 12,
-    color: "#6b7280",
+    color: "var(--text-muted)",
   },
   overlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.35)",
+    background: "rgba(15, 23, 42, 0.46)",
     zIndex: 999,
   },
   modal: {
@@ -533,7 +565,7 @@ const styles = {
     maxWidth: 500,
     maxHeight: "85vh",
     overflowY: "auto",
-    background: "#fff",
+    background: "var(--surface)",
     borderRadius: 14,
     padding: 18,
     zIndex: 1000,
@@ -554,8 +586,8 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 10,
-    borderTop: "1px solid #f3f4f6",
-    borderBottom: "1px solid #f3f4f6",
+    borderTop: "1px solid var(--border-subtle)",
+    borderBottom: "1px solid var(--border-subtle)",
     padding: "10px 0",
   },
   detalleItem: {
@@ -571,7 +603,7 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     fontSize: 13,
-    color: "#374151",
+    color: "var(--text-soft)",
   },
   resumenDetalle: {
     display: "flex",

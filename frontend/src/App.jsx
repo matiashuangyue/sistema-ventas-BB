@@ -1,35 +1,28 @@
 import { useState } from "react";
-import Login from "./pages/LoginTemp";
 import Layout from "./components/Layout";
 import { getToken } from "./services/auth";
+import {
+  Clientes,
+  HistorialVentas,
+  Login,
+  Productos,
+  Reportes,
+  Ventas,
+} from "./pages";
 
-import Ventas from "./pages/Ventas";
-import Compras from "./pages/Compras";
-import HistorialVentas from "./pages/HistorialVentas";
-import Productos from "./pages/Productos";
-import Clientes from "./pages/Clientes";
-import Reportes from "./pages/Reportes";
+const sections = {
+  ventas: Ventas,
+  compras: HistorialVentas,
+  productos: Productos,
+  clientes: Clientes,
+  reportes: Reportes,
+};
 
 function App() {
   const [isAuth, setIsAuth] = useState(!!getToken());
   const [activeSection, setActiveSection] = useState("ventas");
 
-  const renderSection = () => {
-    switch (activeSection) {
-      case "ventas":
-        return <Ventas />;
-      case "compras":
-        return <HistorialVentas />;
-      case "productos":
-        return <Productos />;
-      case "clientes":
-        return <Clientes />;
-      case "reportes":
-        return <Reportes />;
-      default:
-        return <Ventas />;
-    }
-  };
+  const ActiveSection = sections[activeSection] || Ventas;
 
   return isAuth ? (
   <Layout
@@ -40,7 +33,7 @@ function App() {
     activeSection={activeSection}
     onNavigate={setActiveSection}
   >
-    {renderSection()}
+    <ActiveSection />
   </Layout>
 ) : (
   <Login
