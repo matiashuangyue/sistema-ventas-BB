@@ -1,0 +1,18 @@
+.page {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  padding: 18px;
+}
+
+.title {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 22px;
+}
+
+.text {
+  margin: 0;
+  color: var(--text-muted);
+}
