@@ -2,23 +2,131 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getToken } from "../../services/auth";
 import { API_URL as API } from "../../config/api";
 
+const VENTA_DRAFT_STORAGE_KEY = "ventas:borrador:v1";
+
+const BORRADOR_INICIAL = {
+  busqueda: "",
+  carrito: [],
+  descuento: 0,
+  cantidadesBusqueda: {},
+  clienteBusqueda: "",
+  clienteSeleccionado: null,
+};
+
+function leerBorradorVenta() {
+  try {
+    const raw = localStorage.getItem(VENTA_DRAFT_STORAGE_KEY);
+    if (!raw) return BORRADOR_INICIAL;
+
+    const borrador = JSON.parse(raw);
+
+    return {
+      ...BORRADOR_INICIAL,
+      ...borrador,
+      carrito: Array.isArray(borrador.carrito) ? borrador.carrito : [],
+      descuento: Number(borrador.descuento || 0),
+      cantidadesBusqueda:
+        borrador.cantidadesBusqueda &&
+        typeof borrador.cantidadesBusqueda === "object"
+          ? borrador.cantidadesBusqueda
+          : {},
+    };
+  } catch (error) {
+    console.error("No se pudo recuperar el borrador de venta", error);
+    localStorage.removeItem(VENTA_DRAFT_STORAGE_KEY);
+    return BORRADOR_INICIAL;
+  }
+}
+
+function ventaTieneDatos(borrador) {
+  return (
+    borrador.carrito.length > 0 ||
+    Boolean(String(borrador.busqueda || "").trim()) ||
+    Boolean(String(borrador.clienteBusqueda || "").trim()) ||
+    Boolean(borrador.clienteSeleccionado) ||
+    Number(borrador.descuento || 0) > 0
+  );
+}
+
 export default function Ventas() {
   const token = getToken();
   const buscadorRef = useRef(null);
+  const borradorInicialRef = useRef(leerBorradorVenta());
 
   const [variantes, setVariantes] = useState([]);
-  const [busqueda, setBusqueda] = useState("");
-  const [carrito, setCarrito] = useState([]);
-  const [descuento, setDescuento] = useState(0);
-  const [cantidadesBusqueda, setCantidadesBusqueda] = useState({});
-  const [clienteBusqueda, setClienteBusqueda] = useState("");
+  const [busqueda, setBusqueda] = useState(borradorInicialRef.current.busqueda);
+  const [carrito, setCarrito] = useState(borradorInicialRef.current.carrito);
+  const [descuento, setDescuento] = useState(
+    borradorInicialRef.current.descuento,
+  );
+  const [cantidadesBusqueda, setCantidadesBusqueda] = useState(
+    borradorInicialRef.current.cantidadesBusqueda,
+  );
+  const [clienteBusqueda, setClienteBusqueda] = useState(
+    borradorInicialRef.current.clienteBusqueda,
+  );
   const [clientesEncontrados, setClientesEncontrados] = useState([]);
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(
+    borradorInicialRef.current.clienteSeleccionado,
+  );
+  const [borradorVisible, setBorradorVisible] = useState(
+    ventaTieneDatos(borradorInicialRef.current),
+  );
   
 
   useEffect(() => {
     cargarVariantes();
+
+    function refrescarSiVuelveLaPestana() {
+      if (document.visibilityState === "visible") {
+        cargarVariantes();
+      }
+    }
+
+    window.addEventListener("focus", cargarVariantes);
+    document.addEventListener("visibilitychange", refrescarSiVuelveLaPestana);
+
+    return () => {
+      window.removeEventListener("focus", cargarVariantes);
+      document.removeEventListener(
+        "visibilitychange",
+        refrescarSiVuelveLaPestana,
+      );
+    };
   }, []);
+
+  useEffect(() => {
+    const borrador = {
+      busqueda,
+      carrito,
+      descuento,
+      cantidadesBusqueda,
+      clienteBusqueda,
+      clienteSeleccionado,
+    };
+
+    try {
+      if (ventaTieneDatos(borrador)) {
+        localStorage.setItem(
+          VENTA_DRAFT_STORAGE_KEY,
+          JSON.stringify(borrador),
+        );
+        setBorradorVisible(true);
+      } else {
+        localStorage.removeItem(VENTA_DRAFT_STORAGE_KEY);
+        setBorradorVisible(false);
+      }
+    } catch (error) {
+      console.error("No se pudo guardar el borrador de venta", error);
+    }
+  }, [
+    busqueda,
+    carrito,
+    descuento,
+    cantidadesBusqueda,
+    clienteBusqueda,
+    clienteSeleccionado,
+  ]);
 
   useEffect(() => {
   const texto = clienteBusqueda.trim();
@@ -46,6 +154,18 @@ export default function Ventas() {
   async function cargarVariantes() {
     const data = await fetch(`${API}/variantes`).then((r) => r.json());
     setVariantes(data);
+  }
+
+  function limpiarBorradorVenta() {
+    localStorage.removeItem(VENTA_DRAFT_STORAGE_KEY);
+    setBusqueda("");
+    setCarrito([]);
+    setDescuento(0);
+    setCantidadesBusqueda({});
+    setClienteBusqueda("");
+    setClienteSeleccionado(null);
+    setClientesEncontrados([]);
+    setBorradorVisible(false);
   }
 
   const variantesFiltradas = useMemo(() => {
@@ -248,11 +368,7 @@ export default function Ventas() {
 
       alert("Venta realizada ✔");
 
-      setCarrito([]);
-      setDescuento(0);
-      setClienteSeleccionado(null);
-      setClienteBusqueda("");
-      setClientesEncontrados([]);
+      limpiarBorradorVenta();
       await cargarVariantes();
 
       buscadorRef.current?.focus();
@@ -264,6 +380,22 @@ export default function Ventas() {
   return (
     <div style={styles.container}>
       <h2 style={styles.title}>Ventas</h2>
+
+      {borradorVisible && (
+        <div style={styles.borradorAviso}>
+          <span>
+            Venta en curso guardada. Podes salir a actualizar stock y volver
+            sin perder los datos.
+          </span>
+          <button
+            style={styles.btnSecundario}
+            onClick={limpiarBorradorVenta}
+            type="button"
+          >
+            Limpiar borrador
+          </button>
+        </div>
+      )}
 
       <div style={styles.bloque}>
   <label style={styles.label}>Cliente (opcional)</label>
@@ -489,6 +621,19 @@ const styles = {
   title: {
     margin: 0,
   },
+  borradorAviso: {
+    background: "var(--surface-selected)",
+    border: "1px solid var(--border)",
+    borderRadius: 12,
+    padding: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+    color: "var(--text-soft)",
+    fontSize: 13,
+  },
   subTitle: {
     margin: 0,
   },
@@ -511,6 +656,14 @@ const styles = {
     border: "1px solid var(--border-strong)",
     fontSize: 15,
     boxSizing: "border-box",
+  },
+  btnSecundario: {
+    border: "1px solid var(--border-strong)",
+    borderRadius: 10,
+    background: "var(--surface)",
+    color: "var(--text)",
+    padding: "8px 10px",
+    fontWeight: 600,
   },
   resultadosCompactos: {
     marginTop: 10,
