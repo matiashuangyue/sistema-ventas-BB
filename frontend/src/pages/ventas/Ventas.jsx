@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getToken } from "../../services/auth";
 import { API_URL as API } from "../../config/api";
+import LoadingContent from "../../components/LoadingContent";
+import { getToken } from "../../services/auth";
 
 const VENTA_DRAFT_STORAGE_KEY = "ventas:borrador:v1";
 
@@ -72,6 +73,7 @@ export default function Ventas() {
   const [borradorVisible, setBorradorVisible] = useState(
     ventaTieneDatos(borradorInicialRef.current),
   );
+  const [confirmandoVenta, setConfirmandoVenta] = useState(false);
   
 
   useEffect(() => {
@@ -319,6 +321,10 @@ export default function Ventas() {
   const total = Math.max(0, subtotal - descuento);
 
   async function confirmarVenta() {
+    if (confirmandoVenta) {
+      return;
+    }
+
     if (carrito.length === 0) {
       alert("Agregá al menos un producto");
       return;
@@ -344,6 +350,8 @@ export default function Ventas() {
     }
 
     try {
+      setConfirmandoVenta(true);
+
       const res = await fetch(`${API}/ventas`, {
         method: "POST",
         headers: {
@@ -374,6 +382,8 @@ export default function Ventas() {
       buscadorRef.current?.focus();
     } catch (error) {
       alert(error.message);
+    } finally {
+      setConfirmandoVenta(false);
     }
   }
 
@@ -390,6 +400,7 @@ export default function Ventas() {
           <button
             style={styles.btnSecundario}
             onClick={limpiarBorradorVenta}
+            disabled={confirmandoVenta}
             type="button"
           >
             Limpiar borrador
@@ -404,6 +415,7 @@ export default function Ventas() {
     style={styles.input}
     placeholder="Buscar cliente..."
     value={clienteBusqueda}
+    disabled={confirmandoVenta}
     onChange={(e) => {
       setClienteBusqueda(e.target.value);
       setClienteSeleccionado(null);
@@ -421,6 +433,7 @@ export default function Ventas() {
 
       <button
         style={styles.btnQuitarCliente}
+        disabled={confirmandoVenta}
         onClick={() => {
           setClienteSeleccionado(null);
           setClienteBusqueda("");
@@ -467,6 +480,7 @@ export default function Ventas() {
           style={styles.input}
           placeholder="Ej: Lavanda, Oreo..."
           value={busqueda}
+          disabled={confirmandoVenta}
           onChange={(e) => setBusqueda(e.target.value)}
         />
 
@@ -502,6 +516,7 @@ export default function Ventas() {
       min="1"
       style={styles.inputCantidadBusqueda}
       value={cantidadesBusqueda[variante.id] ?? 1}
+      disabled={confirmandoVenta}
       onChange={(e) =>
         handleCantidadBusquedaChange(variante.id, e.target.value)
       }
@@ -517,6 +532,7 @@ export default function Ventas() {
     <button
       style={styles.btnAgregar}
       onClick={() => agregarAlCarrito(variante)}
+      disabled={confirmandoVenta}
     >
       +
     </button>
@@ -551,6 +567,7 @@ export default function Ventas() {
     <button
       style={styles.btnDelete}
       onClick={() => eliminarItem(item.varianteId)}
+      disabled={confirmandoVenta}
       title="Eliminar"
     >
       🗑
@@ -569,6 +586,7 @@ export default function Ventas() {
       min="1"
       style={styles.carritoCantidad}
       value={item.cantidad}
+      disabled={confirmandoVenta}
       onChange={(e) =>
         cambiarCantidadCarrito(item.varianteId, e.target.value)
       }
@@ -595,6 +613,7 @@ export default function Ventas() {
             min="0"
             style={styles.inputDescuento}
             value={descuento}
+            disabled={confirmandoVenta}
             onChange={(e) => setDescuento(Number(e.target.value) || 0)}
           />
         </div>
@@ -604,8 +623,17 @@ export default function Ventas() {
           <strong>${total}</strong>
         </div>
 
-        <button style={styles.btnConfirmar} onClick={confirmarVenta}>
-          Confirmar venta
+        <button
+          style={styles.btnConfirmar}
+          onClick={confirmarVenta}
+          disabled={confirmandoVenta}
+        >
+          <LoadingContent
+            loading={confirmandoVenta}
+            loadingText="Procesando venta..."
+          >
+            Confirmar venta
+          </LoadingContent>
         </button>
       </div>
     </div>

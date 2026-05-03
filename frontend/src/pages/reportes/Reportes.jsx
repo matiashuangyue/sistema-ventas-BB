@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { API_URL as API } from "../../config/api";
+import LoadingContent from "../../components/LoadingContent";
 
 async function obtenerDashboard({ desde = "", hasta = "" } = {}) {
   const params = new URLSearchParams();
@@ -101,8 +102,14 @@ export default function Reportes() {
             <input type="date" style={styles.input} value={hasta} onChange={(e) => setHasta(e.target.value)} />
           </div>
         </div>
-        <button style={styles.btnPrincipalFull} onClick={cargarReportes}>
-          Actualizar Reporte
+        <button
+          style={styles.btnPrincipalFull}
+          onClick={cargarReportes}
+          disabled={loading}
+        >
+          <LoadingContent loading={loading} loadingText="Actualizando...">
+            Actualizar Reporte
+          </LoadingContent>
         </button>
       </div>
 

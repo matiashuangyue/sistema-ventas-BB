@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { login } from "../../services/auth";
 import { API_URL as API } from "../../config/api";
+import LoadingContent from "../../components/LoadingContent";
 import Signup from "./Signup";
 import styles from "./Auth.module.css";
 
@@ -75,12 +76,15 @@ export default function Login({ onLogin }) {
             disabled={loading}
             type="submit"
           >
-            {loading ? "Verificando..." : "Ingresar"}
+            <LoadingContent loading={loading} loadingText="Verificando...">
+              Ingresar
+            </LoadingContent>
           </button>
 
           <button
             className={styles.linkButton}
             onClick={() => setEsRegistro(true)}
+            disabled={loading}
             type="button"
           >
             No tenes cuenta? Registrate aqui
