@@ -89,46 +89,60 @@ async function guardarPrecioPorProducto(dto) {
       throw new AppError("El producto no tiene variantes para actualizar");
     }
 
-    const precios = [];
-
-    for (const variante of variantes) {
-      const existente = await preciosVariantesRepository.findByEscala(
-        variante.id,
+    const varianteIds = variantes.map((variante) => variante.id);
+    const preciosExistentes =
+      await preciosVariantesRepository.findByEscalaForVariantes(
+        varianteIds,
         listaPrecioId,
         cantidadMinima,
         tx,
       );
 
-      if (existente) {
-        precios.push(
-          await preciosVariantesRepository.updatePrecioVariante(
-            existente.id,
-            { precio },
-            tx,
-          ),
-        );
-        continue;
-      }
+    const variantesConPrecio = new Set(
+      preciosExistentes.map((precioExistente) => precioExistente.varianteId),
+    );
+    const precioIdsExistentes = preciosExistentes.map(
+      (precioExistente) => precioExistente.id,
+    );
+    const preciosNuevos = variantes
+      .filter((variante) => !variantesConPrecio.has(variante.id))
+      .map((variante) => ({
+        varianteId: variante.id,
+        listaPrecioId,
+        precio,
+        cantidadMinima,
+      }));
 
-      precios.push(
-        await preciosVariantesRepository.createPrecioVariante(
-          {
-            varianteId: variante.id,
-            listaPrecioId,
-            precio,
-            cantidadMinima,
-          },
+    const actualizados = precioIdsExistentes.length
+      ? await preciosVariantesRepository.updateManyPreciosVariantesByIds(
+          precioIdsExistentes,
+          { precio },
           tx,
-        ),
-      );
-    }
+        )
+      : { count: 0 };
+
+    const creados = preciosNuevos.length
+      ? await preciosVariantesRepository.createManyPreciosVariantes(
+          preciosNuevos,
+          tx,
+        )
+      : { count: 0 };
+
+    const precios = await preciosVariantesRepository.findByEscalaForVariantes(
+      varianteIds,
+      listaPrecioId,
+      cantidadMinima,
+      tx,
+    );
 
     return {
       productoId,
       listaPrecioId,
       cantidadMinima,
       precio,
-      variantesActualizadas: precios.length,
+      variantesActualizadas: variantes.length,
+      preciosActualizados: actualizados.count,
+      preciosCreados: creados.count,
       precios,
     };
   });

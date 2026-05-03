@@ -2,6 +2,22 @@ const AppError = require("../../../shared/errors/app-error");
 const logger = require("../../../shared/logger/logger");
 const ventasRepository = require("../repositories/ventas.repository");
 
+function agruparCantidadesPorVariante(items) {
+  const cantidades = new Map();
+
+  for (const item of items) {
+    cantidades.set(
+      item.varianteId,
+      (cantidades.get(item.varianteId) || 0) + item.cantidad,
+    );
+  }
+
+  return Array.from(cantidades.entries()).map(([varianteId, cantidad]) => ({
+    varianteId,
+    cantidad,
+  }));
+}
+
 async function crearVenta(dto) {
   logger.info(
     `Se inicia la creacion de venta para cliente ${dto.clienteId || "consumidor final"} con ${dto.items.length} items`,
@@ -213,19 +229,16 @@ async function eliminarVenta(id) {
       return null;
     }
 
-    for (const detalle of venta.detalles) {
-      await ventasRepository.updateStockVariante(tx, detalle.varianteId, {
-        stock: {
-          increment: detalle.cantidad,
-        },
-      });
-    }
+    await ventasRepository.updateStockVariantesByDeltas(
+      tx,
+      agruparCantidadesPorVariante(venta.detalles),
+    );
 
     await ventasRepository.deleteVentaDetalles(tx, venta.id);
     await ventasRepository.deleteVenta(tx, venta.id);
 
     return venta.id;
-  });
+  }, { timeout: 30000 });
 
   if (resultado === null) {
     logger.warn(`Eliminacion de venta rechazada: venta ${ventaId} no encontrada`);

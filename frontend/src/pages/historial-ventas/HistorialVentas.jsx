@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import LoadingContent from "../../components/LoadingContent";
 import { API_URL as API } from "../../config/api";
 
 function getFechaHoy() {
@@ -47,6 +48,7 @@ export default function HistorialVentas() {
   const [ventas, setVentas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [eliminandoVenta, setEliminandoVenta] = useState(false);
+  const [detalleVentaCargandoId, setDetalleVentaCargandoId] = useState(null);
 
   const [ventaDetalle, setVentaDetalle] = useState(null);
   const [detalleOpen, setDetalleOpen] = useState(false);
@@ -97,7 +99,10 @@ export default function HistorialVentas() {
   }
 
   async function verDetalle(id) {
+    if (detalleVentaCargandoId || eliminandoVenta) return;
+
     try {
+      setDetalleVentaCargandoId(id);
       const res = await fetch(`${API}/ventas/${id}`);
       const data = await res.json();
 
@@ -110,6 +115,8 @@ export default function HistorialVentas() {
     } catch (error) {
       console.error(error);
       alert(error.message);
+    } finally {
+      setDetalleVentaCargandoId(null);
     }
   }
 
@@ -318,8 +325,14 @@ export default function HistorialVentas() {
             Limpiar
           </button>
 
-          <button style={styles.btnPrincipal} onClick={cargarVentas}>
-            Buscar
+          <button
+            style={styles.btnPrincipal}
+            onClick={cargarVentas}
+            disabled={loading}
+          >
+            <LoadingContent loading={loading} loadingText="Buscando...">
+              Buscar
+            </LoadingContent>
           </button>
         </div>
       </div>
@@ -337,11 +350,23 @@ export default function HistorialVentas() {
           ventas.map((venta) => (
             <div
               key={venta.id}
-              style={styles.ventaFila}
+              style={{
+                ...styles.ventaFila,
+                ...(detalleVentaCargandoId === venta.id
+                  ? styles.ventaFilaCargando
+                  : {}),
+              }}
               onClick={() => verDetalle(venta.id)}
             >
               <div style={styles.ventaLinea1}>
-                <strong>Venta #{venta.id}</strong>
+                <strong>
+                  <LoadingContent
+                    loading={detalleVentaCargandoId === venta.id}
+                    loadingText="Cargando detalle..."
+                  >
+                    Venta #{venta.id}
+                  </LoadingContent>
+                </strong>
                 <span>{formatearFecha(venta.fecha)}</span>
               </div>
 
@@ -360,7 +385,10 @@ export default function HistorialVentas() {
 
       {detalleOpen && ventaDetalle && (
         <>
-          <div style={styles.overlay} onClick={cerrarDetalle}></div>
+          <div
+            style={styles.overlay}
+            onClick={eliminandoVenta ? undefined : cerrarDetalle}
+          ></div>
 
           <div style={styles.modal}>
             <h3 style={styles.modalTitle}>
@@ -411,7 +439,11 @@ export default function HistorialVentas() {
             </div>
 
             <div style={styles.modalActions}>
-              <button style={styles.btnSecundario} onClick={cerrarDetalle}>
+              <button
+                style={styles.btnSecundario}
+                onClick={cerrarDetalle}
+                disabled={eliminandoVenta}
+              >
                 Cerrar
               </button>
 
@@ -420,7 +452,12 @@ export default function HistorialVentas() {
                 onClick={eliminarVenta}
                 disabled={eliminandoVenta}
               >
-                {eliminandoVenta ? "Borrando..." : "Borrar venta"}
+                <LoadingContent
+                  loading={eliminandoVenta}
+                  loadingText="Borrando..."
+                >
+                  Borrar venta
+                </LoadingContent>
               </button>
 
               <button
@@ -530,6 +567,10 @@ const styles = {
     flexDirection: "column",
     gap: 6,
     cursor: "pointer",
+  },
+  ventaFilaCargando: {
+    opacity: 0.72,
+    cursor: "wait",
   },
   ventaLinea1: {
     display: "flex",

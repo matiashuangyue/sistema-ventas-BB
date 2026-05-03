@@ -5,22 +5,57 @@ function createVariante(data) {
 }
 
 function findById(id, client = prisma) {
-  return client.variante.findUnique({
-    where: { id },
+  return client.variante.findFirst({
+    where: {
+      id,
+      activo: true,
+      producto: {
+        activo: true,
+      },
+    },
   });
 }
 
-function findByNombreAndProducto(nombre, productoId) {
-  return prisma.variante.findFirst({
+function findActiveProductoById(productoId, client = prisma) {
+  return client.producto.findFirst({
+    where: {
+      id: productoId,
+      activo: true,
+    },
+  });
+}
+
+function findByNombreAndProducto(nombre, productoId, client = prisma) {
+  return client.variante.findFirst({
     where: {
       nombre,
       productoId,
+      activo: true,
+    },
+  });
+}
+
+function findByNombreAndProductoExceptId(nombre, productoId, id, client = prisma) {
+  return client.variante.findFirst({
+    where: {
+      nombre,
+      productoId,
+      activo: true,
+      NOT: {
+        id,
+      },
     },
   });
 }
 
 function findManyWithRelations() {
   return prisma.variante.findMany({
+    where: {
+      activo: true,
+      producto: {
+        activo: true,
+      },
+    },
     include: {
       producto: true,
       precios: {
@@ -38,6 +73,15 @@ function findManyWithRelations() {
   });
 }
 
+function softDeleteVariante(id, client = prisma) {
+  return client.variante.update({
+    where: { id },
+    data: {
+      activo: false,
+    },
+  });
+}
+
 function updateVariante(id, data, client = prisma) {
   return client.variante.update({
     where: { id },
@@ -47,8 +91,11 @@ function updateVariante(id, data, client = prisma) {
 
 module.exports = {
   createVariante,
+  findActiveProductoById,
   findById,
   findByNombreAndProducto,
+  findByNombreAndProductoExceptId,
   findManyWithRelations,
+  softDeleteVariante,
   updateVariante,
 };

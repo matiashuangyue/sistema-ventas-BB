@@ -1,4 +1,5 @@
 import { useState } from "react";
+import LoadingContent from "../../components/LoadingContent";
 import styles from "./Auth.module.css";
 
 export default function Signup({ onBack, API }) {
@@ -109,10 +110,17 @@ export default function Signup({ onBack, API }) {
             disabled={loading}
             type="submit"
           >
-            {loading ? "Registrando..." : "Crear Cuenta"}
+            <LoadingContent loading={loading} loadingText="Registrando...">
+              Crear Cuenta
+            </LoadingContent>
           </button>
 
-          <button className={styles.linkButton} onClick={onBack} type="button">
+          <button
+            className={styles.linkButton}
+            onClick={onBack}
+            disabled={loading}
+            type="button"
+          >
             Ya tengo cuenta, volver al login
           </button>
         </form>

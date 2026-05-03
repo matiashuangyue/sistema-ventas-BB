@@ -50,4 +50,13 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+router.delete("/:id", async (req, res) => {
+  try {
+    const variante = await variantesService.eliminarVariante(req.params.id);
+    res.json({ ok: true, variante });
+  } catch (error) {
+    handleControllerError(res, error, "Error eliminando variante");
+  }
+});
+
 module.exports = router;
