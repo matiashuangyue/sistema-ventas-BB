@@ -753,12 +753,7 @@ async function guardarPrecio() {
                 value={precioProductoId}
                 onChange={(e) => {
                   const id = e.target.value;
-                  const producto = productosBase.find(
-                    (item) => item.id === Number(id)
-                  );
-
                   setPrecioProductoId(id);
-                  if (producto) setPrecioProductoBusqueda(producto.nombre);
                 }}
             >
                 <option value="">Seleccionar producto</option>
