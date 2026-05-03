@@ -20,7 +20,7 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const variantes = await variantesService.listarVariantes();
+    const variantes = await variantesService.listarVariantes(req.query);
     res.json(variantes);
   } catch (error) {
     handleControllerError(res, error, "Error obteniendo variantes");

@@ -47,14 +47,94 @@ async function crearVariante(dto) {
   return variante;
 }
 
-async function listarVariantes() {
+function normalizarEntero(valor, fallback, { min = 1, max = 100 } = {}) {
+  const numero = Number(valor);
+
+  if (!Number.isInteger(numero)) return fallback;
+
+  return Math.min(Math.max(numero, min), max);
+}
+
+function crearFiltroListado(query = {}) {
+  const texto = query.search || query.q || "";
+  const search = String(texto).trim();
+  const productoId = query.productoId ? Number(query.productoId) : null;
+  const ids = String(query.ids || "")
+    .split(",")
+    .map((id) => Number(id.trim()))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  const where = {
+    activo: true,
+    producto: {
+      activo: true,
+    },
+  };
+
+  if (productoId && !Number.isNaN(productoId)) {
+    where.productoId = productoId;
+  }
+
+  if (ids.length > 0) {
+    where.id = {
+      in: ids,
+    };
+  }
+
+  if (search) {
+    where.OR = [
+      {
+        nombre: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      {
+        producto: {
+          nombre: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      },
+      {
+        producto: {
+          categoria: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      },
+    ];
+  }
+
+  return where;
+}
+
+async function listarVariantes(query = {}) {
   logger.info("Se inicia el listado de variantes");
 
-  const variantes = await variantesRepository.findManyWithRelations();
+  const page = normalizarEntero(query.page, 1, { min: 1, max: 100000 });
+  const limit = normalizarEntero(query.limit, 50, { min: 1, max: 100 });
+  const skip = (page - 1) * limit;
+  const where = crearFiltroListado(query);
+  const [total, variantes] = await variantesRepository.findPageWithRelations({
+    where,
+    skip,
+    take: limit,
+  });
 
-  logger.info(`Listado de variantes finalizado con ${variantes.length} registros`);
+  logger.info(
+    `Listado de variantes finalizado con ${variantes.length} de ${total} registros`,
+  );
 
-  return variantes;
+  return {
+    items: variantes,
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+  };
 }
 
 async function actualizarStock(id, dto) {

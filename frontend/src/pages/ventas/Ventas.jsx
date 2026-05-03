@@ -53,6 +53,7 @@ export default function Ventas() {
   const token = getToken();
   const buscadorRef = useRef(null);
   const borradorInicialRef = useRef(leerBorradorVenta());
+  const carritoRef = useRef(borradorInicialRef.current.carrito);
 
   const [variantes, setVariantes] = useState([]);
   const [busqueda, setBusqueda] = useState(borradorInicialRef.current.busqueda);
@@ -74,27 +75,39 @@ export default function Ventas() {
     ventaTieneDatos(borradorInicialRef.current),
   );
   const [confirmandoVenta, setConfirmandoVenta] = useState(false);
+  const [resultadoVarianteIds, setResultadoVarianteIds] = useState([]);
+  const [buscandoVariantes, setBuscandoVariantes] = useState(false);
   
+  useEffect(() => {
+    carritoRef.current = carrito;
+  }, [carrito]);
+
 
   useEffect(() => {
-    cargarVariantes();
+    cargarVariantes().catch((error) => console.error(error));
 
     function refrescarSiVuelveLaPestana() {
       if (document.visibilityState === "visible") {
-        cargarVariantes();
+        cargarVariantes().catch((error) => console.error(error));
       }
     }
 
-    window.addEventListener("focus", cargarVariantes);
+    function refrescarAlVolverFoco() {
+      cargarVariantes().catch((error) => console.error(error));
+    }
+
+    window.addEventListener("focus", refrescarAlVolverFoco);
     document.addEventListener("visibilitychange", refrescarSiVuelveLaPestana);
 
     return () => {
-      window.removeEventListener("focus", cargarVariantes);
+      window.removeEventListener("focus", refrescarAlVolverFoco);
       document.removeEventListener(
         "visibilitychange",
         refrescarSiVuelveLaPestana,
       );
     };
+  // cargarVariantes usa carritoRef para refrescar siempre el carrito actual.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -153,10 +166,86 @@ export default function Ventas() {
   return () => clearTimeout(timeout);
 }, [clienteBusqueda]);
 
-  async function cargarVariantes() {
-    const data = await fetch(`${API}/variantes`).then((r) => r.json());
-    setVariantes(data);
+  function normalizarRespuestaVariantes(data) {
+    if (Array.isArray(data)) return data;
+    return Array.isArray(data.items) ? data.items : [];
   }
+
+  function fusionarVariantes(nuevasVariantes) {
+    setVariantes((prev) => {
+      const porId = new Map(prev.map((variante) => [variante.id, variante]));
+
+      nuevasVariantes.forEach((variante) => {
+        porId.set(variante.id, variante);
+      });
+
+      return Array.from(porId.values());
+    });
+  }
+
+  async function cargarVariantes(
+    ids = carritoRef.current.map((item) => item.varianteId),
+  ) {
+    const idsUnicos = Array.from(new Set(ids)).filter(Boolean);
+
+    if (idsUnicos.length === 0) {
+      return [];
+    }
+
+    const params = new URLSearchParams({
+      ids: idsUnicos.join(","),
+      limit: String(Math.min(Math.max(idsUnicos.length, 1), 100)),
+    });
+    const res = await fetch(`${API}/variantes?${params.toString()}`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Error cargando productos del carrito");
+    }
+
+    const items = normalizarRespuestaVariantes(data);
+    fusionarVariantes(items);
+    return items;
+  }
+
+  useEffect(() => {
+    const texto = busqueda.trim();
+
+    if (!texto) {
+      setResultadoVarianteIds([]);
+      setBuscandoVariantes(false);
+      return;
+    }
+
+    const timeout = setTimeout(async () => {
+      try {
+        setBuscandoVariantes(true);
+        const params = new URLSearchParams({
+          search: texto,
+          page: "1",
+          limit: "20",
+        });
+        const res = await fetch(`${API}/variantes?${params.toString()}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Error buscando productos");
+        }
+
+        const items = normalizarRespuestaVariantes(data);
+
+        fusionarVariantes(items);
+        setResultadoVarianteIds(items.map((variante) => variante.id));
+      } catch (error) {
+        console.error(error);
+        setResultadoVarianteIds([]);
+      } finally {
+        setBuscandoVariantes(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [busqueda]);
 
   function limpiarBorradorVenta() {
     localStorage.removeItem(VENTA_DRAFT_STORAGE_KEY);
@@ -171,14 +260,16 @@ export default function Ventas() {
   }
 
   const variantesFiltradas = useMemo(() => {
-    const texto = busqueda.trim().toLowerCase();
-    if (!texto) return [];
+    if (!busqueda.trim()) return [];
 
-    return variantes.filter((v) => {
-      const combinado = `${v.producto?.nombre || ""} ${v.nombre}`.toLowerCase();
-      return combinado.includes(texto);
-    });
-  }, [variantes, busqueda]);
+    return resultadoVarianteIds
+      .map((id) => variantes.find((variante) => variante.id === id))
+      .filter(Boolean);
+  }, [variantes, resultadoVarianteIds, busqueda]);
+
+  const cargandoVariantesCarrito = carrito.some(
+    (item) => !variantes.some((variante) => variante.id === item.varianteId),
+  );
 
   function obtenerPrecioAplicado(variante, cantidad) {
     if (!variante?.precios?.length || !cantidad || cantidad <= 0) {
@@ -330,6 +421,11 @@ export default function Ventas() {
       return;
     }
 
+    if (cargandoVariantesCarrito) {
+      alert("Espera a que terminen de cargar los productos del carrito");
+      return;
+    }
+
     const itemsInvalidos = carrito.some(
       (item) => !item.cantidad || Number(item.cantidad) <= 0
     );
@@ -377,7 +473,7 @@ export default function Ventas() {
       alert("Venta realizada ✔");
 
       limpiarBorradorVenta();
-      await cargarVariantes();
+      setResultadoVarianteIds([]);
 
       buscadorRef.current?.focus();
     } catch (error) {
@@ -484,7 +580,19 @@ export default function Ventas() {
           onChange={(e) => setBusqueda(e.target.value)}
         />
 
-        {variantesFiltradas.length > 0 && (
+        {buscandoVariantes && (
+          <div style={styles.searchStatus}>
+            <LoadingContent loading={true} loadingText="Buscando productos..." />
+          </div>
+        )}
+
+        {!buscandoVariantes &&
+          busqueda.trim() &&
+          variantesFiltradas.length === 0 && (
+            <div style={styles.searchStatus}>No se encontraron productos.</div>
+          )}
+
+        {!buscandoVariantes && variantesFiltradas.length > 0 && (
           <div style={styles.resultadosCompactos}>
             {variantesFiltradas.map((variante) => {
               const cantidadPreview = Number(cantidadesBusqueda[variante.id] || 1);
@@ -551,6 +659,15 @@ export default function Ventas() {
           <p style={styles.empty}>Todavía no hay productos agregados.</p>
         )}
 
+        {cargandoVariantesCarrito && (
+          <p style={styles.empty}>
+            <LoadingContent
+              loading={true}
+              loadingText="Cargando productos del carrito..."
+            />
+          </p>
+        )}
+
         {carrito.map((item) => {
           const variante = variantes.find((v) => v.id === item.varianteId);
           const aplicado = obtenerPrecioAplicado(variante, Number(item.cantidad || 0));
@@ -561,7 +678,8 @@ export default function Ventas() {
             <div key={item.varianteId} style={styles.carritoCard}>
   <div style={styles.carritoLinea1}>
     <div style={styles.carritoNombreCompleto}>
-      {variante?.producto?.nombre} - {item.nombre}
+      {variante?.producto?.nombre || item.productoNombre || "Producto"} -{" "}
+      {item.nombre}
     </div>
 
     <button
@@ -626,7 +744,7 @@ export default function Ventas() {
         <button
           style={styles.btnConfirmar}
           onClick={confirmarVenta}
-          disabled={confirmandoVenta}
+          disabled={confirmandoVenta || cargandoVariantesCarrito}
         >
           <LoadingContent
             loading={confirmandoVenta}
@@ -714,6 +832,11 @@ const styles = {
   empty: {
     margin: 0,
     color: "var(--text-muted)",
+  },
+  searchStatus: {
+    color: "var(--text-muted)",
+    fontSize: 13,
+    marginTop: 10,
   },
   carritoCard: {
   borderBottom: "1px solid var(--border-subtle)",

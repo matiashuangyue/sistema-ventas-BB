@@ -38,13 +38,22 @@ function createProducto(data, client = prisma) {
   return client.producto.create({ data });
 }
 
-function findActiveWithVariantes() {
+function findActiveWithVariantCount() {
   return prisma.producto.findMany({
     where: { activo: true },
-    include: {
-      variantes: {
-        where: {
-          activo: true,
+    select: {
+      id: true,
+      nombre: true,
+      categoria: true,
+      activo: true,
+      createdAt: true,
+      _count: {
+        select: {
+          variantes: {
+            where: {
+              activo: true,
+            },
+          },
         },
       },
     },
@@ -87,7 +96,7 @@ module.exports = {
   findActiveById,
   findActiveByName,
   findActiveByNameExceptId,
-  findActiveWithVariantes,
+  findActiveWithVariantCount,
   softDeleteProducto,
   softDeleteVariantesByProducto,
   transaction,
