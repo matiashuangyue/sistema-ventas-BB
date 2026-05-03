@@ -48,29 +48,29 @@ function findByNombreAndProductoExceptId(nombre, productoId, id, client = prisma
   });
 }
 
-function findManyWithRelations() {
-  return prisma.variante.findMany({
-    where: {
-      activo: true,
-      producto: {
-        activo: true,
-      },
-    },
-    include: {
-      producto: true,
-      precios: {
-        include: {
-          listaPrecio: true,
-        },
-        orderBy: {
-          cantidadMinima: "asc",
+function findPageWithRelations({ where, skip, take }) {
+  return prisma.$transaction([
+    prisma.variante.count({ where }),
+    prisma.variante.findMany({
+      where,
+      include: {
+        producto: true,
+        precios: {
+          include: {
+            listaPrecio: true,
+          },
+          orderBy: {
+            cantidadMinima: "asc",
+          },
         },
       },
-    },
-    orderBy: {
-      id: "desc",
-    },
-  });
+      orderBy: {
+        id: "desc",
+      },
+      skip,
+      take,
+    }),
+  ]);
 }
 
 function softDeleteVariante(id, client = prisma) {
@@ -95,7 +95,7 @@ module.exports = {
   findById,
   findByNombreAndProducto,
   findByNombreAndProductoExceptId,
-  findManyWithRelations,
+  findPageWithRelations,
   softDeleteVariante,
   updateVariante,
 };

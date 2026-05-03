@@ -3,6 +3,8 @@ import { API_URL as API } from "../../config/api";
 import LoadingContent from "../../components/LoadingContent";
 import { getToken } from "../../services/auth";
 
+const VARIANTES_PAGE_SIZE = 25;
+
 export default function Productos() {
   const token = getToken();
 
@@ -10,6 +12,11 @@ export default function Productos() {
   const [productosBase, setProductosBase] = useState([]);
   const [listasPrecio, setListasPrecio] = useState([]);
   const [cargandoProductos, setCargandoProductos] = useState(true);
+  const [cargandoVariantes, setCargandoVariantes] = useState(false);
+  const [catalogoInicialListo, setCatalogoInicialListo] = useState(false);
+  const [paginaVariantes, setPaginaVariantes] = useState(1);
+  const [totalVariantes, setTotalVariantes] = useState(0);
+  const [totalPaginasVariantes, setTotalPaginasVariantes] = useState(1);
 
   const [busqueda, setBusqueda] = useState("");
   const [productoFiltroId, setProductoFiltroId] = useState("");
@@ -57,7 +64,8 @@ export default function Productos() {
   const [editarPrecioValor, setEditarPrecioValor] = useState("");
   const [accionEnCurso, setAccionEnCurso] = useState(null);
 
-  const hayAccionEnCurso = Boolean(accionEnCurso) || cargandoProductos;
+  const hayCargaDeVariantes = cargandoProductos || cargandoVariantes;
+  const hayAccionEnCurso = Boolean(accionEnCurso) || hayCargaDeVariantes;
 
   function accionActiva(nombre) {
     return accionEnCurso === nombre;
@@ -93,16 +101,87 @@ export default function Productos() {
     return data;
   }
 
-  async function cargarVariantes() {
+  function normalizarRespuestaVariantes(data, page, limit) {
+    if (Array.isArray(data)) {
+      return {
+        items: data,
+        page: 1,
+        limit: data.length || limit,
+        total: data.length,
+        totalPages: 1,
+      };
+    }
+
+    return {
+      items: Array.isArray(data.items) ? data.items : [],
+      page: Number(data.page || page),
+      limit: Number(data.limit || limit),
+      total: Number(data.total || 0),
+      totalPages: Math.max(1, Number(data.totalPages || 1)),
+    };
+  }
+
+  async function cargarVariantes({
+    page = paginaVariantes,
+    search = busqueda,
+    productoId = productoFiltroId,
+    mostrarCarga = true,
+  } = {}) {
+    const paginaObjetivo = Math.max(1, Number(page) || 1);
+    const params = new URLSearchParams({
+      page: String(paginaObjetivo),
+      limit: String(VARIANTES_PAGE_SIZE),
+    });
+    const texto = search.trim();
+
+    if (texto) {
+      params.set("search", texto);
+    }
+
+    if (productoId) {
+      params.set("productoId", productoId);
+    }
+
     try {
-      const res = await fetch(`${API}/variantes`);
+      if (mostrarCarga) {
+        setCargandoVariantes(true);
+      }
+
+      const res = await fetch(`${API}/variantes?${params.toString()}`);
       const data = await handleResponse(res, "Error cargando productos");
-      setVariantes(data);
-      return data;
+      const respuesta = normalizarRespuestaVariantes(
+        data,
+        paginaObjetivo,
+        VARIANTES_PAGE_SIZE,
+      );
+
+      if (
+        respuesta.total > 0 &&
+        respuesta.items.length === 0 &&
+        paginaObjetivo > respuesta.totalPages
+      ) {
+        return cargarVariantes({
+          page: respuesta.totalPages,
+          search,
+          productoId,
+          mostrarCarga: false,
+        });
+      }
+
+      setVariantes(respuesta.items);
+      setPaginaVariantes(respuesta.page);
+      setTotalVariantes(respuesta.total);
+      setTotalPaginasVariantes(respuesta.totalPages);
+
+      return respuesta.items;
     } catch (error) {
       console.error(error);
       alert(error.message);
       return [];
+    } finally {
+      if (mostrarCarga) {
+        setCargandoVariantes(false);
+      }
     }
   }
 
@@ -127,7 +206,7 @@ export default function Productos() {
         setCargandoProductos(true);
 
         const [variantesRes, productosRes] = await Promise.all([
-          fetch(`${API}/variantes`),
+          fetch(`${API}/variantes?page=1&limit=${VARIANTES_PAGE_SIZE}`),
           fetch(`${API}/productos`),
         ]);
         const [variantesData, productosData] = await Promise.all([
@@ -147,8 +226,18 @@ export default function Productos() {
 
         if (!activo) return;
 
-        setVariantes(variantesData);
+        const respuestaVariantes = normalizarRespuestaVariantes(
+          variantesData,
+          1,
+          VARIANTES_PAGE_SIZE,
+        );
+
+        setVariantes(respuestaVariantes.items);
+        setPaginaVariantes(respuestaVariantes.page);
+        setTotalVariantes(respuestaVariantes.total);
+        setTotalPaginasVariantes(respuestaVariantes.totalPages);
         setProductosBase(productosData);
+        setCatalogoInicialListo(true);
       } catch (error) {
         console.error(error);
         alert(error.message);
@@ -165,6 +254,22 @@ export default function Productos() {
       activo = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!catalogoInicialListo) return;
+
+    const timeout = setTimeout(() => {
+      cargarVariantes({
+        page: 1,
+        search: busqueda,
+        productoId: productoFiltroId,
+      });
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  // cargarVariantes lee los filtros actuales del render; aca solo queremos debouncear cambios de filtro.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busqueda, productoFiltroId, catalogoInicialListo]);
 
   async function cargarListasPrecio() {
     try {
@@ -184,18 +289,8 @@ export default function Productos() {
   }, [productosBase]);
 
   const variantesFiltradas = useMemo(() => {
-    const texto = busqueda.trim().toLowerCase();
-    const productoId = productoFiltroId ? Number(productoFiltroId) : null;
-
-    return variantes.filter((variante) => {
-      const coincideProducto = !productoId || variante.productoId === productoId;
-      const nombreCompleto =
-        `${variante.producto?.nombre || ""} ${variante.nombre}`.toLowerCase();
-      const coincideTexto = !texto || nombreCompleto.includes(texto);
-
-      return coincideProducto && coincideTexto;
-    });
-  }, [variantes, busqueda, productoFiltroId]);
+    return variantes;
+  }, [variantes]);
 
   const productosPrecioFiltrados = useMemo(() => {
     const texto = precioProductoBusqueda.trim().toLowerCase();
@@ -216,16 +311,22 @@ export default function Productos() {
   );
 
   const cantidadVariantesPrecioProducto = useMemo(() => {
-    if (!precioProductoId) return 0;
-
-    return variantes.filter(
-      (variante) => variante.productoId === Number(precioProductoId),
-    ).length;
-  }, [variantes, precioProductoId]);
+    return productoPrecioSeleccionado?.variantesActivas || 0;
+  }, [productoPrecioSeleccionado]);
 
   function limpiarFiltrosProductos() {
     setBusqueda("");
     setProductoFiltroId("");
+  }
+
+  function cambiarPaginaVariantes(nuevaPagina) {
+    if (nuevaPagina < 1 || nuevaPagina > totalPaginasVariantes) return;
+
+    cargarVariantes({
+      page: nuevaPagina,
+      search: busqueda,
+      productoId: productoFiltroId,
+    });
   }
 
   function limpiarNuevoProducto() {
@@ -794,26 +895,26 @@ export default function Productos() {
         </div>
 
         <div style={styles.filtroResumen}>
-          {cargandoProductos ? (
+          {hayCargaDeVariantes ? (
             <LoadingContent loading={true} loadingText="Cargando productos..." />
           ) : (
-            `${variantesFiltradas.length} de ${variantes.length} variantes visibles`
+            `${variantesFiltradas.length} de ${totalVariantes} variantes visibles`
           )}
         </div>
       </div>
 
       <div style={styles.lista}>
-        {cargandoProductos && (
+        {hayCargaDeVariantes && (
           <div style={styles.loadingProductos}>
             <LoadingContent loading={true} loadingText="Cargando productos..." />
           </div>
         )}
 
-        {!cargandoProductos && variantesFiltradas.length === 0 && (
+        {!hayCargaDeVariantes && variantesFiltradas.length === 0 && (
           <div style={styles.empty}>No se encontraron productos.</div>
         )}
 
-        {!cargandoProductos && variantesFiltradas.map((variante) => (
+        {!hayCargaDeVariantes && variantesFiltradas.map((variante) => (
           <div key={variante.id} style={styles.card}>
             <div style={styles.cardBody}>
               <div style={styles.linea1}>
@@ -888,6 +989,32 @@ export default function Productos() {
             </div>
           </div>
         ))}
+
+        {!hayCargaDeVariantes && totalPaginasVariantes > 1 && (
+          <div style={styles.pagination}>
+            <button
+              style={styles.btnSecundario}
+              onClick={() => cambiarPaginaVariantes(paginaVariantes - 1)}
+              disabled={hayAccionEnCurso || paginaVariantes <= 1}
+              type="button"
+            >
+              Anterior
+            </button>
+            <span style={styles.paginationText}>
+              Pagina {paginaVariantes} de {totalPaginasVariantes}
+            </span>
+            <button
+              style={styles.btnSecundario}
+              onClick={() => cambiarPaginaVariantes(paginaVariantes + 1)}
+              disabled={
+                hayAccionEnCurso || paginaVariantes >= totalPaginasVariantes
+              }
+              type="button"
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
       </div>
 
       {stockModalOpen && (
@@ -1047,7 +1174,10 @@ export default function Productos() {
                     <>
                       <div style={styles.productInfo}>
                         <strong>{producto.nombre}</strong>
-                        <span>{producto.categoria || "Sin categoria"}</span>
+                        <span>
+                          {producto.categoria || "Sin categoria"} -{" "}
+                          {producto.variantesActivas || 0} variante(s)
+                        </span>
                       </div>
                       <div style={styles.productActions}>
                         <button
@@ -1567,6 +1697,19 @@ const styles = {
     justifyContent: "center",
     minHeight: 88,
     padding: 18,
+  },
+  pagination: {
+    alignItems: "center",
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 10,
+    justifyContent: "center",
+    padding: "4px 0",
+  },
+  paginationText: {
+    color: "var(--text-soft)",
+    fontSize: 13,
+    fontWeight: 600,
   },
   emptyCompact: {
     border: "1px solid var(--border)",

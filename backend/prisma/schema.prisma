@@ -41,6 +41,8 @@ model Producto {
   createdAt DateTime @default(now())
 
   variantes Variante[]
+
+  @@index([activo, nombre])
 }
 
 model Variante {
@@ -56,6 +58,9 @@ model Variante {
   precios  PrecioVariante[]
   detalles VentaDetalle[]
   compras CompraDetalle[]
+
+  @@index([activo, productoId])
+  @@index([activo, nombre])
 }
 
 model ListaPrecio {
@@ -75,6 +80,9 @@ model PrecioVariante {
 
   variante    Variante    @relation(fields: [varianteId], references: [id])
   listaPrecio ListaPrecio @relation(fields: [listaPrecioId], references: [id])
+
+  @@index([varianteId, cantidadMinima])
+  @@index([listaPrecioId])
 }
 
 model Venta {

@@ -35,11 +35,21 @@ async function crearProducto(dto) {
 async function listarProductos() {
   logger.info("Se inicia el listado de productos activos");
 
-  const productos = await productosRepository.findActiveWithVariantes();
+  const productos = await productosRepository.findActiveWithVariantCount();
+  const productosNormalizados = productos.map((producto) => ({
+    id: producto.id,
+    nombre: producto.nombre,
+    categoria: producto.categoria,
+    activo: producto.activo,
+    createdAt: producto.createdAt,
+    variantesActivas: producto._count.variantes,
+  }));
 
-  logger.info(`Listado de productos finalizado con ${productos.length} registros`);
+  logger.info(
+    `Listado de productos finalizado con ${productosNormalizados.length} registros`,
+  );
 
-  return productos;
+  return productosNormalizados;
 }
 
 async function actualizarProducto(id, dto) {
