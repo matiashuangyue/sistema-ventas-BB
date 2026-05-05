@@ -20,7 +20,7 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const variantes = await variantesService.listarVariantes();
+    const variantes = await variantesService.listarVariantes(req.query);
     res.json(variantes);
   } catch (error) {
     handleControllerError(res, error, "Error obteniendo variantes");
@@ -47,6 +47,15 @@ router.put("/:id", async (req, res) => {
     res.json(variante);
   } catch (error) {
     handleControllerError(res, error, "Error actualizando variante");
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const variante = await variantesService.eliminarVariante(req.params.id);
+    res.json({ ok: true, variante });
+  } catch (error) {
+    handleControllerError(res, error, "Error eliminando variante");
   }
 });
 

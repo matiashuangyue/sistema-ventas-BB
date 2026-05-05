@@ -1,4 +1,5 @@
 const prisma = require("../../../lib/prisma");
+const { Prisma } = require("@prisma/client");
 
 const ventaIncludeDetalle = {
   cliente: true,
@@ -125,6 +126,25 @@ function updateStockVariante(client, id, data) {
   });
 }
 
+function updateStockVariantesByDeltas(client, deltas) {
+  if (deltas.length === 0) {
+    return Promise.resolve(0);
+  }
+
+  const values = Prisma.join(
+    deltas.map((delta) =>
+      Prisma.sql`(${delta.varianteId}::int, ${delta.cantidad}::int)`,
+    ),
+  );
+
+  return client.$executeRaw`
+    UPDATE "Variante" AS v
+    SET "stock" = v."stock" + delta."cantidad"
+    FROM (VALUES ${values}) AS delta("id", "cantidad")
+    WHERE v."id" = delta."id"
+  `;
+}
+
 function updateVenta(client, id, data) {
   return client.venta.update({
     where: { id },
@@ -148,6 +168,7 @@ module.exports = {
   findVentas,
   findVentasHistorial,
   transaction,
+  updateStockVariantesByDeltas,
   updateStockVariante,
   updateVenta,
 };

@@ -42,6 +42,8 @@ model Producto {
   createdAt DateTime @default(now())
 
   variantes Variante[]
+
+  @@index([activo, nombre])
 }
 
 model Variante {
@@ -50,12 +52,16 @@ model Variante {
   stock       Int      @default(0)
   stockMinimo Int?
   productoId  Int
+  activo      Boolean  @default(true)
   createdAt   DateTime @default(now())
 
   producto Producto @relation(fields: [productoId], references: [id])
   precios  PrecioVariante[]
   detalles VentaDetalle[]
   compras CompraDetalle[]
+
+  @@index([activo, productoId])
+  @@index([activo, nombre])
 }
 
 model ListaPrecio {
@@ -75,6 +81,9 @@ model PrecioVariante {
 
   variante    Variante    @relation(fields: [varianteId], references: [id])
   listaPrecio ListaPrecio @relation(fields: [listaPrecioId], references: [id])
+
+  @@index([varianteId, cantidadMinima])
+  @@index([listaPrecioId])
 }
 
 model Venta {
@@ -131,7 +140,6 @@ model CompraDetalle {
   compra   Compra   @relation(fields: [compraId], references: [id])
   variante Variante @relation(fields: [varianteId], references: [id])
 }
-
 model Cobro {
   id            Int      @id @default(autoincrement())
   clienteId     Int?

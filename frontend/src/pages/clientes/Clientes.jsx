@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { API_URL as API } from "../../config/api";
+import LoadingContent from "../../components/LoadingContent";
 
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
   const [busqueda, setBusqueda] = useState("");
+  const [guardandoCliente, setGuardandoCliente] = useState(false);
 
   const [modalNuevoOpen, setModalNuevoOpen] = useState(false);
   const [modalEditarOpen, setModalEditarOpen] = useState(false);
@@ -91,8 +93,10 @@ export default function Clientes() {
 
   async function guardarNuevoCliente() {
     if (!nombre.trim()) return alert("El nombre es obligatorio");
+    if (guardandoCliente) return;
 
     try {
+      setGuardandoCliente(true);
       const res = await fetch(`${API}/clientes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -114,13 +118,17 @@ export default function Clientes() {
       cerrarModalNuevo();
     } catch (error) {
       alert(error.message);
+    } finally {
+      setGuardandoCliente(false);
     }
   }
 
   async function guardarEdicionCliente() {
     if (!clienteEditar || !nombre.trim()) return alert("Nombre obligatorio");
+    if (guardandoCliente) return;
 
     try {
+      setGuardandoCliente(true);
       const res = await fetch(`${API}/clientes/${clienteEditar.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -141,6 +149,8 @@ export default function Clientes() {
       cerrarModalEditar();
     } catch (error) {
       alert(error.message);
+    } finally {
+      setGuardandoCliente(false);
     }
   }
 
@@ -185,7 +195,16 @@ export default function Clientes() {
       {/* MODAL (Nuevo / Editar) */}
       {(modalNuevoOpen || modalEditarOpen) && (
         <>
-          <div style={styles.overlay} onClick={modalNuevoOpen ? cerrarModalNuevo : cerrarModalEditar}></div>
+          <div
+            style={styles.overlay}
+            onClick={
+              guardandoCliente
+                ? undefined
+                : modalNuevoOpen
+                  ? cerrarModalNuevo
+                  : cerrarModalEditar
+            }
+          ></div>
           <div style={styles.modal}>
             <h3 style={styles.modalTitle}>{modalNuevoOpen ? "Nuevo Cliente" : "Editar Cliente"}</h3>
             <input style={styles.input} placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} />
@@ -197,8 +216,25 @@ export default function Clientes() {
             <textarea style={styles.textarea} placeholder="Observaciones" value={observaciones} onChange={e => setObservaciones(e.target.value)} />
             
             <div style={styles.modalActions}>
-              <button style={styles.btnSecundario} onClick={modalNuevoOpen ? cerrarModalNuevo : cerrarModalEditar}>Cancelar</button>
-              <button style={styles.btnNuevo} onClick={modalNuevoOpen ? guardarNuevoCliente : guardarEdicionCliente}>Guardar</button>
+              <button
+                style={styles.btnSecundario}
+                onClick={modalNuevoOpen ? cerrarModalNuevo : cerrarModalEditar}
+                disabled={guardandoCliente}
+              >
+                Cancelar
+              </button>
+              <button
+                style={styles.btnNuevo}
+                onClick={modalNuevoOpen ? guardarNuevoCliente : guardarEdicionCliente}
+                disabled={guardandoCliente}
+              >
+                <LoadingContent
+                  loading={guardandoCliente}
+                  loadingText="Guardando..."
+                >
+                  Guardar
+                </LoadingContent>
+              </button>
             </div>
           </div>
         </>

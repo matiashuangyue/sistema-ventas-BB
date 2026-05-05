@@ -5,35 +5,79 @@ function createVariante(data) {
 }
 
 function findById(id, client = prisma) {
-  return client.variante.findUnique({
-    where: { id },
+  return client.variante.findFirst({
+    where: {
+      id,
+      activo: true,
+      producto: {
+        activo: true,
+      },
+    },
   });
 }
 
-function findByNombreAndProducto(nombre, productoId) {
-  return prisma.variante.findFirst({
+function findActiveProductoById(productoId, client = prisma) {
+  return client.producto.findFirst({
+    where: {
+      id: productoId,
+      activo: true,
+    },
+  });
+}
+
+function findByNombreAndProducto(nombre, productoId, client = prisma) {
+  return client.variante.findFirst({
     where: {
       nombre,
       productoId,
+      activo: true,
     },
   });
 }
 
-function findManyWithRelations() {
-  return prisma.variante.findMany({
-    include: {
-      producto: true,
-      precios: {
-        include: {
-          listaPrecio: true,
-        },
-        orderBy: {
-          cantidadMinima: "asc",
-        },
+function findByNombreAndProductoExceptId(nombre, productoId, id, client = prisma) {
+  return client.variante.findFirst({
+    where: {
+      nombre,
+      productoId,
+      activo: true,
+      NOT: {
+        id,
       },
     },
-    orderBy: {
-      id: "desc",
+  });
+}
+
+function findPageWithRelations({ where, skip, take }) {
+  return prisma.$transaction([
+    prisma.variante.count({ where }),
+    prisma.variante.findMany({
+      where,
+      include: {
+        producto: true,
+        precios: {
+          include: {
+            listaPrecio: true,
+          },
+          orderBy: {
+            cantidadMinima: "asc",
+          },
+        },
+      },
+      orderBy: {
+        id: "desc",
+      },
+      skip,
+      take,
+    }),
+  ]);
+}
+
+function softDeleteVariante(id, client = prisma) {
+  return client.variante.update({
+    where: { id },
+    data: {
+      activo: false,
     },
   });
 }
@@ -47,8 +91,11 @@ function updateVariante(id, data, client = prisma) {
 
 module.exports = {
   createVariante,
+  findActiveProductoById,
   findById,
   findByNombreAndProducto,
-  findManyWithRelations,
+  findByNombreAndProductoExceptId,
+  findPageWithRelations,
+  softDeleteVariante,
   updateVariante,
 };
