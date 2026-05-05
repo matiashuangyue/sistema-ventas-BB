@@ -81,6 +81,38 @@ function calcularPagoInicial(dto, total, formaPago) {
   return montoPagado;
 }
 
+function calcularPagoCorregido({ montoPagado }, total, formaPago, clienteId) {
+  const montoBase = montoPagado == null ? 0 : montoPagado;
+
+  if (!Number.isFinite(montoBase)) {
+    throw new AppError("Monto pagado invalido");
+  }
+
+  const monto = redondearMonto(montoBase);
+
+  if (monto < 0) {
+    throw new AppError("El monto pagado no puede ser negativo");
+  }
+
+  if (formaPago === "CUENTA_CORRIENTE" && monto > 0) {
+    throw new AppError(
+      "La forma cuenta corriente no puede registrar monto pagado",
+    );
+  }
+
+  if (monto > total) {
+    throw new AppError("El monto pagado no puede superar el total");
+  }
+
+  if (total - monto > 0 && !clienteId) {
+    throw new AppError(
+      "Para dejar saldo pendiente tenes que seleccionar un cliente",
+    );
+  }
+
+  return monto;
+}
+
 function agruparCantidadesPorVariante(items) {
   const cantidades = new Map();
 
@@ -376,6 +408,63 @@ async function obtenerVentaPorId(id) {
   return venta;
 }
 
+async function actualizarPagoVenta(id, dto) {
+  const ventaId = Number(id);
+
+  logger.info(`Se inicia la actualizacion de pago de venta ${id}`);
+
+  if (Number.isNaN(ventaId)) {
+    logger.warn(`Actualizacion de pago rechazada: id invalido ${id}`);
+    throw new AppError("ID de venta invalido");
+  }
+
+  const ventaActualizada = await ventasRepository.transaction(async (tx) => {
+    const venta = await ventasRepository.findVentaByIdInTransaction(tx, ventaId);
+
+    if (!venta) {
+      throw new AppError("Venta no encontrada", 404);
+    }
+
+    const formaPago = normalizarFormaPago(dto.formaPago || venta.formaPago);
+    const montoPagado = calcularPagoCorregido(
+      {
+        montoPagado:
+          dto.montoPagado == null ? venta.montoPagado : dto.montoPagado,
+      },
+      venta.total,
+      formaPago,
+      venta.clienteId,
+    );
+    const saldoPendiente = redondearMonto(venta.total - montoPagado);
+    const estadoPago = calcularEstadoPago(venta.total, montoPagado);
+    const observacionesPago = dto.observacionesPago || null;
+
+    await ventasRepository.deleteCobrosByVentaId(tx, venta.id);
+
+    if (venta.clienteId && montoPagado > 0) {
+      await ventasRepository.createCobro(tx, {
+        clienteId: venta.clienteId,
+        ventaId: venta.id,
+        monto: montoPagado,
+        formaPago,
+        observaciones: observacionesPago || "Pago ajustado desde historial",
+      });
+    }
+
+    return ventasRepository.updateVenta(tx, venta.id, {
+      formaPago,
+      montoPagado,
+      saldoPendiente,
+      estadoPago,
+      observacionesPago,
+    });
+  }, { timeout: 30000 });
+
+  logger.info(`Pago de venta ${ventaId} actualizado correctamente`);
+
+  return ventaActualizada;
+}
+
 async function eliminarVenta(id) {
   const ventaId = Number(id);
 
@@ -416,6 +505,7 @@ async function eliminarVenta(id) {
 }
 
 module.exports = {
+  actualizarPagoVenta,
   crearVenta,
   eliminarVenta,
   listarVentas,

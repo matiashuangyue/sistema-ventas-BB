@@ -82,11 +82,12 @@ function normalizarRespuestaResumen(data, page, limit) {
   };
 }
 
-async function obtenerResumenCobranzas(
+async function obtenerResumenCobranzas({
   cliente = "",
   page = 1,
   limit = COBRANZAS_PAGE_SIZE,
-) {
+  soloConDeuda = false,
+} = {}) {
   const params = new URLSearchParams();
 
   params.set("page", String(Math.max(1, Number(page) || 1)));
@@ -94,6 +95,10 @@ async function obtenerResumenCobranzas(
 
   if (cliente.trim()) {
     params.append("cliente", cliente.trim());
+  }
+
+  if (soloConDeuda) {
+    params.set("soloConDeuda", "true");
   }
 
   const query = params.toString();
@@ -117,6 +122,8 @@ export default function Cobranzas() {
   const [totalClientes, setTotalClientes] = useState(0);
   const [totalPaginasClientes, setTotalPaginasClientes] = useState(1);
   const [totales, setTotales] = useState(TOTALES_INICIALES);
+  const [soloConDeuda, setSoloConDeuda] = useState(false);
+  const [ventasDetalleAbiertas, setVentasDetalleAbiertas] = useState({});
 
   const [ventaCobro, setVentaCobro] = useState(null);
   const [montoCobro, setMontoCobro] = useState("");
@@ -130,7 +137,11 @@ export default function Cobranzas() {
     const timeout = setTimeout(async () => {
       try {
         setLoading(true);
-        const data = await obtenerResumenCobranzas(busqueda, paginaClientes);
+        const data = await obtenerResumenCobranzas({
+          cliente: busqueda,
+          page: paginaClientes,
+          soloConDeuda,
+        });
         const respuesta = normalizarRespuestaResumen(
           data,
           paginaClientes,
@@ -158,7 +169,7 @@ export default function Cobranzas() {
       cancelado = true;
       clearTimeout(timeout);
     };
-  }, [busqueda, paginaClientes]);
+  }, [busqueda, paginaClientes, soloConDeuda]);
 
   async function verCuenta(clienteId) {
     try {
@@ -174,6 +185,7 @@ export default function Cobranzas() {
       }
 
       setCuenta(data);
+      setVentasDetalleAbiertas({});
     } catch (error) {
       console.error(error);
       alert(error.message);
@@ -213,6 +225,23 @@ export default function Cobranzas() {
     setPaginaClientes(pagina);
   }
 
+  function alternarFiltroDeuda() {
+    setSoloConDeuda((actual) => !actual);
+    setPaginaClientes(1);
+  }
+
+  function limpiarFiltroDeuda() {
+    setSoloConDeuda(false);
+    setPaginaClientes(1);
+  }
+
+  function alternarDetalleVenta(ventaId) {
+    setVentasDetalleAbiertas((prev) => ({
+      ...prev,
+      [ventaId]: !prev[ventaId],
+    }));
+  }
+
   async function registrarCobro() {
     if (!ventaCobro) return;
 
@@ -248,7 +277,11 @@ export default function Cobranzas() {
       }
 
       setCuenta(data);
-      const resumen = await obtenerResumenCobranzas(busqueda, paginaClientes);
+      const resumen = await obtenerResumenCobranzas({
+        cliente: busqueda,
+        page: paginaClientes,
+        soloConDeuda,
+      });
       aplicarResumen(
         normalizarRespuestaResumen(
           resumen,
@@ -291,15 +324,36 @@ export default function Cobranzas() {
             {formatearMoneda(totales.saldoPendiente)}
           </strong>
         </div>
-        <div style={styles.metrica}>
+        <button
+          style={{
+            ...styles.metrica,
+            ...styles.metricaButton,
+            ...(soloConDeuda ? styles.metricaActiva : {}),
+          }}
+          onClick={alternarFiltroDeuda}
+          type="button"
+        >
           <span style={styles.metricaLabel}>Clientes con deuda</span>
           <strong style={styles.metricaValor}>{totales.clientesConSaldo}</strong>
-        </div>
+        </button>
         <div style={styles.metrica}>
           <span style={styles.metricaLabel}>Ventas pendientes</span>
           <strong style={styles.metricaValor}>{totales.ventasPendientes}</strong>
         </div>
       </div>
+
+      {soloConDeuda && (
+        <div style={styles.filtroActivo}>
+          <span>Mostrando solo clientes con deuda.</span>
+          <button
+            style={styles.btnSecundario}
+            onClick={limpiarFiltroDeuda}
+            type="button"
+          >
+            Mostrar todos
+          </button>
+        </div>
+      )}
 
       <div style={styles.contenido}>
         <section style={styles.panel}>
@@ -424,27 +478,83 @@ export default function Cobranzas() {
                   <div style={styles.emptyInterno}>No hay ventas pendientes.</div>
                 )}
 
-                {cuenta.ventasPendientes.map((venta) => (
-                  <div key={venta.id} style={styles.ventaPendiente}>
-                    <div>
-                      <strong>Venta #{venta.id}</strong>
-                      <div style={styles.detalleMuted}>
-                        {formatearFecha(venta.fecha)}
+                {cuenta.ventasPendientes.map((venta) => {
+                  const detalleAbierto = Boolean(
+                    ventasDetalleAbiertas[venta.id],
+                  );
+
+                  return (
+                    <div key={venta.id} style={styles.ventaPendiente}>
+                      <div>
+                        <strong>Venta #{venta.id}</strong>
+                        <div style={styles.detalleMuted}>
+                          {formatearFecha(venta.fecha)}
+                        </div>
                       </div>
+                      <div style={styles.ventaNumeros}>
+                        <span>Total {formatearMoneda(venta.total)}</span>
+                        <strong>
+                          Saldo {formatearMoneda(venta.saldoPendiente)}
+                        </strong>
+                      </div>
+
+                      <div style={styles.ventaPendienteActions}>
+                        <button
+                          style={styles.btnSecundario}
+                          onClick={() => alternarDetalleVenta(venta.id)}
+                          type="button"
+                        >
+                          {detalleAbierto ? "Ocultar detalle" : "Ver detalle"}
+                        </button>
+                        <button
+                          style={styles.btnPrincipal}
+                          onClick={() => abrirCobro(venta)}
+                          type="button"
+                        >
+                          Cobrar
+                        </button>
+                      </div>
+
+                      {detalleAbierto && (
+                        <div style={styles.ventaDetalleBox}>
+                          <div style={styles.ventaDetalleResumen}>
+                            <span>
+                              Pagado {formatearMoneda(venta.montoPagado)}
+                            </span>
+                            {venta.descuento > 0 && (
+                              <span>
+                                Descuento {formatearMoneda(venta.descuento)}
+                              </span>
+                            )}
+                          </div>
+
+                          {venta.detalles?.length > 0 ? (
+                            venta.detalles.map((item) => (
+                              <div key={item.id} style={styles.ventaDetalleItem}>
+                                <div style={styles.ventaDetalleProducto}>
+                                  {item.productoNombre} - {item.varianteNombre}
+                                </div>
+                                <div style={styles.ventaDetalleNumeros}>
+                                  <span>x{item.cantidad}</span>
+                                  <span>
+                                    {formatearMoneda(item.precioUnitario)}
+                                  </span>
+                                  <strong>
+                                    {formatearMoneda(item.subtotal)}
+                                  </strong>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div style={styles.emptyInterno}>
+                              Esta venta no tiene detalle de productos.
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div style={styles.ventaNumeros}>
-                      <span>Total {formatearMoneda(venta.total)}</span>
-                      <strong>Saldo {formatearMoneda(venta.saldoPendiente)}</strong>
-                    </div>
-                    <button
-                      style={styles.btnPrincipal}
-                      onClick={() => abrirCobro(venta)}
-                      type="button"
-                    >
-                      Cobrar
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div style={styles.seccionDetalle}>
@@ -605,8 +715,30 @@ const styles = {
     flexDirection: "column",
     gap: 6,
   },
+  metricaButton: {
+    alignItems: "flex-start",
+    color: "var(--text)",
+    textAlign: "left",
+  },
+  metricaActiva: {
+    borderColor: "var(--primary)",
+    background: "var(--surface-selected)",
+  },
   metricaLabel: { fontSize: 12, color: "var(--text-muted)" },
   metricaValor: { fontSize: 18 },
+  filtroActivo: {
+    alignItems: "center",
+    background: "var(--surface-selected)",
+    border: "1px solid var(--border)",
+    borderRadius: 12,
+    color: "var(--text-soft)",
+    display: "flex",
+    flexWrap: "wrap",
+    fontSize: 13,
+    gap: 10,
+    justifyContent: "space-between",
+    padding: 12,
+  },
   contenido: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
@@ -718,6 +850,41 @@ const styles = {
     justifyContent: "space-between",
     gap: 8,
     fontSize: 13,
+  },
+  ventaPendienteActions: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 8,
+  },
+  ventaDetalleBox: {
+    borderTop: "1px solid var(--border-subtle)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    paddingTop: 8,
+  },
+  ventaDetalleResumen: {
+    color: "var(--text-soft)",
+    display: "flex",
+    flexWrap: "wrap",
+    fontSize: 12,
+    gap: 10,
+  },
+  ventaDetalleItem: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  ventaDetalleProducto: {
+    fontSize: 13,
+    fontWeight: 600,
+  },
+  ventaDetalleNumeros: {
+    color: "var(--text-soft)",
+    display: "grid",
+    fontSize: 12,
+    gap: 8,
+    gridTemplateColumns: "48px 1fr 1fr",
   },
   movimiento: {
     borderBottom: "1px solid var(--border-subtle)",

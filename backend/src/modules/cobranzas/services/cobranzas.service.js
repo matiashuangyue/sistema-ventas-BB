@@ -43,6 +43,12 @@ function normalizarEntero(valor, fallback, { min = 1, max = 100 } = {}) {
   return Math.min(Math.max(numero, min), max);
 }
 
+function normalizarBooleano(valor) {
+  return ["1", "true", "si"].includes(
+    String(valor || "").trim().toLowerCase(),
+  );
+}
+
 function mapResumenCliente(cliente) {
   const saldoPendiente = redondearMonto(
     cliente.ventas.reduce((acc, venta) => acc + venta.saldoPendiente, 0),
@@ -143,11 +149,21 @@ function construirVentasPendientes(ventas) {
     .map((venta) => ({
       id: venta.id,
       fecha: venta.fecha,
+      subtotal: venta.subtotal,
+      descuento: venta.descuento,
       total: venta.total,
       montoPagado: venta.montoPagado,
       saldoPendiente: venta.saldoPendiente,
       estadoPago: venta.estadoPago,
       formaPago: venta.formaPago,
+      detalles: (venta.detalles || []).map((detalle) => ({
+        id: detalle.id,
+        cantidad: detalle.cantidad,
+        precioUnitario: detalle.precioUnitario,
+        subtotal: detalle.subtotal,
+        productoNombre: detalle.variante?.producto?.nombre || "Producto",
+        varianteNombre: detalle.variante?.nombre || "Variante",
+      })),
     }))
     .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 }
@@ -171,8 +187,11 @@ function calcularTotalesResumen(clientes) {
 }
 
 async function listarResumen(filtros = {}) {
+  const soloConDeuda = normalizarBooleano(filtros.soloConDeuda);
+
   logger.info("Se inicia la consulta de resumen de cobranzas", {
     cliente: filtros.cliente || null,
+    soloConDeuda,
   });
 
   const page = normalizarEntero(filtros.page, 1, { min: 1, max: 100000 });
@@ -183,12 +202,17 @@ async function listarResumen(filtros = {}) {
 
   const resumen = clientes
     .map(mapResumenCliente)
-    .filter(
-      (cliente) =>
+    .filter((cliente) => {
+      if (soloConDeuda) {
+        return cliente.saldoPendiente > 0;
+      }
+
+      return (
         cliente.saldoPendiente > 0 ||
         cliente.totalVendido > 0 ||
-        Boolean(filtros.cliente),
-    )
+        Boolean(filtros.cliente)
+      );
+    })
     .sort((a, b) => {
       if (a.saldoPendiente !== b.saldoPendiente) {
         return b.saldoPendiente - a.saldoPendiente;
