@@ -3,6 +3,7 @@ const cors = require("cors");
 
 const authController = require("./modules/auth/controllers/auth.controller");
 const clientesController = require("./modules/clientes/controllers/clientes.controller");
+const cobranzasController = require("./modules/cobranzas/controllers/cobranzas.controller");
 const comprasController = require("./modules/compras/controllers/compras.controller");
 const listasPrecioController = require("./modules/listas-precio/controllers/listas-precio.controller");
 const preciosVariantesController = require("./modules/precios-variantes/controllers/precios-variantes.controller");
@@ -23,6 +24,7 @@ function createApp() {
 
   app.use("/auth", authController);
   app.use("/clientes", clientesController);
+  app.use("/cobranzas", cobranzasController);
   app.use("/compras", comprasController);
   app.use("/listas-precio", listasPrecioController);
   app.use("/precios-variantes", preciosVariantesController);

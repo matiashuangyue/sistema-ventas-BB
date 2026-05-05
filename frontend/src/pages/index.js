@@ -1,5 +1,6 @@
 export { Login, Signup } from "./auth";
 export { Clientes } from "./clientes";
+export { Cobranzas } from "./cobranzas";
 export { Compras } from "./compras";
 export { Dashboard } from "./dashboard";
 export { HistorialVentas } from "./historial-ventas";

@@ -3,6 +3,7 @@ import Layout from "./components/Layout";
 import { getToken } from "./services/auth";
 import {
   Clientes,
+  Cobranzas,
   HistorialVentas,
   Login,
   Productos,
@@ -13,6 +14,7 @@ import {
 const sections = {
   ventas: Ventas,
   compras: HistorialVentas,
+  cobranzas: Cobranzas,
   productos: Productos,
   clientes: Clientes,
   reportes: Reportes,

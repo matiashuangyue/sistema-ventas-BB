@@ -2,6 +2,77 @@ const AppError = require("../../../shared/errors/app-error");
 const logger = require("../../../shared/logger/logger");
 const ventasRepository = require("../repositories/ventas.repository");
 
+const FORMAS_PAGO_VALIDAS = new Set([
+  "EFECTIVO",
+  "TRANSFERENCIA",
+  "TARJETA",
+  "CUENTA_CORRIENTE",
+  "OTRO",
+]);
+
+function redondearMonto(valor) {
+  return Math.round(Number(valor) * 100) / 100;
+}
+
+function normalizarFormaPago(formaPago) {
+  const valor = String(formaPago || "EFECTIVO").trim().toUpperCase();
+
+  if (!FORMAS_PAGO_VALIDAS.has(valor)) {
+    throw new AppError("Forma de pago invalida");
+  }
+
+  return valor;
+}
+
+function calcularEstadoPago(total, montoPagado) {
+  if (montoPagado <= 0) {
+    return "PENDIENTE";
+  }
+
+  if (montoPagado < total) {
+    return "PARCIAL";
+  }
+
+  return "PAGADA";
+}
+
+function calcularPagoInicial(dto, total, formaPago) {
+  const montoBase =
+    dto.montoPagado == null
+      ? formaPago === "CUENTA_CORRIENTE"
+        ? 0
+        : total
+      : dto.montoPagado;
+
+  if (!Number.isFinite(montoBase)) {
+    throw new AppError("Monto pagado invalido");
+  }
+
+  const montoPagado = redondearMonto(montoBase);
+
+  if (montoPagado < 0) {
+    throw new AppError("El monto pagado no puede ser negativo");
+  }
+
+  if (formaPago === "CUENTA_CORRIENTE" && montoPagado > 0) {
+    throw new AppError(
+      "La forma cuenta corriente no puede registrar monto pagado",
+    );
+  }
+
+  if (montoPagado > total) {
+    throw new AppError("El monto pagado no puede superar el total");
+  }
+
+  if (total - montoPagado > 0 && !dto.clienteId) {
+    throw new AppError(
+      "Para dejar saldo pendiente tenes que seleccionar un cliente",
+    );
+  }
+
+  return montoPagado;
+}
+
 function agruparCantidadesPorVariante(items) {
   const cantidades = new Map();
 
@@ -26,6 +97,13 @@ async function crearVenta(dto) {
   if (!Array.isArray(dto.items) || dto.items.length === 0) {
     logger.warn("Creacion de venta rechazada: no se recibieron items");
     throw new AppError("La venta debe incluir items");
+  }
+
+  if (!Number.isFinite(dto.descuento) || dto.descuento < 0) {
+    logger.warn("Creacion de venta rechazada: descuento invalido", {
+      descuento: dto.descuento,
+    });
+    throw new AppError("El descuento no puede ser negativo");
   }
 
   const ventaFinal = await ventasRepository.transaction(
@@ -116,10 +194,33 @@ async function crearVenta(dto) {
         throw new AppError("El descuento no puede ser mayor al subtotal");
       }
 
-      return ventasRepository.updateVenta(tx, nuevaVenta.id, {
+      const total = redondearMonto(subtotal - dto.descuento);
+      const formaPago = normalizarFormaPago(dto.formaPago);
+      const montoPagado = calcularPagoInicial(dto, total, formaPago);
+      const saldoPendiente = redondearMonto(total - montoPagado);
+      const estadoPago = calcularEstadoPago(total, montoPagado);
+
+      await ventasRepository.updateVenta(tx, nuevaVenta.id, {
         subtotal,
-        total: subtotal - dto.descuento,
+        total,
+        formaPago,
+        montoPagado,
+        saldoPendiente,
+        estadoPago,
+        observacionesPago: dto.observacionesPago || null,
       });
+
+      if (dto.clienteId && montoPagado > 0) {
+        await ventasRepository.createCobro(tx, {
+          clienteId: dto.clienteId,
+          ventaId: nuevaVenta.id,
+          monto: montoPagado,
+          formaPago,
+          observaciones: dto.observacionesPago || null,
+        });
+      }
+
+      return ventasRepository.findVentaByIdInTransaction(tx, nuevaVenta.id);
     },
     { timeout: 600000 },
   );
@@ -185,6 +286,10 @@ async function obtenerHistorial(dto) {
     subtotal: venta.subtotal,
     descuento: venta.descuento,
     total: venta.total,
+    formaPago: venta.formaPago,
+    montoPagado: venta.montoPagado,
+    saldoPendiente: venta.saldoPendiente,
+    estadoPago: venta.estadoPago,
     cantidadItems: venta.detalles.length,
     unidadesTotales: venta.detalles.reduce(
       (acc, item) => acc + item.cantidad,
@@ -234,6 +339,7 @@ async function eliminarVenta(id) {
       agruparCantidadesPorVariante(venta.detalles),
     );
 
+    await ventasRepository.deleteCobrosByVentaId(tx, venta.id);
     await ventasRepository.deleteVentaDetalles(tx, venta.id);
     await ventasRepository.deleteVenta(tx, venta.id);
 
