@@ -1,9 +1,21 @@
 const prisma = require("../../../lib/prisma");
 
-const ventaConCobrosInclude = {
+const ventaConCuentaInclude = {
   cobros: {
     orderBy: {
       fecha: "asc",
+    },
+  },
+  detalles: {
+    orderBy: {
+      id: "asc",
+    },
+    include: {
+      variante: {
+        include: {
+          producto: true,
+        },
+      },
     },
   },
 };
@@ -22,7 +34,7 @@ function findClienteConCuenta(clienteId) {
     include: {
       ventas: {
         orderBy: [{ fecha: "asc" }, { id: "asc" }],
-        include: ventaConCobrosInclude,
+        include: ventaConCuentaInclude,
       },
     },
   });

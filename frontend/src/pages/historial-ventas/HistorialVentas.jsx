@@ -6,6 +6,14 @@ import { API_URL as API } from "../../config/api";
 
 const HISTORIAL_PAGE_SIZE = 10;
 
+const FORMAS_PAGO = [
+  { value: "EFECTIVO", label: "Efectivo" },
+  { value: "TRANSFERENCIA", label: "Transferencia" },
+  { value: "TARJETA", label: "Tarjeta" },
+  { value: "CUENTA_CORRIENTE", label: "Cuenta corriente" },
+  { value: "OTRO", label: "Otro" },
+];
+
 function getFechaHoy() {
   const hoy = new Date();
   return hoy.toISOString().split("T")[0];
@@ -108,6 +116,11 @@ export default function HistorialVentas() {
 
   const [ventaDetalle, setVentaDetalle] = useState(null);
   const [detalleOpen, setDetalleOpen] = useState(false);
+  const [pagoEditOpen, setPagoEditOpen] = useState(false);
+  const [pagoForma, setPagoForma] = useState("EFECTIVO");
+  const [pagoMonto, setPagoMonto] = useState("");
+  const [pagoObservaciones, setPagoObservaciones] = useState("");
+  const [guardandoPago, setGuardandoPago] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -199,6 +212,10 @@ export default function HistorialVentas() {
       }
 
       setVentaDetalle(data);
+      setPagoEditOpen(false);
+      setPagoForma(data.formaPago || "EFECTIVO");
+      setPagoMonto(String(data.montoPagado || 0));
+      setPagoObservaciones(data.observacionesPago || "");
       setDetalleOpen(true);
     } catch (error) {
       console.error(error);
@@ -337,6 +354,87 @@ export default function HistorialVentas() {
   function cerrarDetalle() {
     setDetalleOpen(false);
     setVentaDetalle(null);
+    setPagoEditOpen(false);
+    setPagoMonto("");
+    setPagoForma("EFECTIVO");
+    setPagoObservaciones("");
+  }
+
+  function abrirEditorPago() {
+    if (!ventaDetalle) return;
+
+    setPagoForma(ventaDetalle.formaPago || "EFECTIVO");
+    setPagoMonto(String(ventaDetalle.montoPagado || 0));
+    setPagoObservaciones(ventaDetalle.observacionesPago || "");
+    setPagoEditOpen(true);
+  }
+
+  function dejarVentaPendiente() {
+    setPagoForma("CUENTA_CORRIENTE");
+    setPagoMonto("0");
+  }
+
+  async function guardarPagoVenta() {
+    if (!ventaDetalle || guardandoPago) return;
+
+    const monto = Number(pagoMonto || 0);
+
+    if (!Number.isFinite(monto) || monto < 0) {
+      alert("El monto pagado no puede ser negativo");
+      return;
+    }
+
+    if (monto > ventaDetalle.total) {
+      alert("El monto pagado no puede superar el total");
+      return;
+    }
+
+    if (pagoForma === "CUENTA_CORRIENTE" && monto > 0) {
+      alert("Cuenta corriente debe quedar con monto pagado 0");
+      return;
+    }
+
+    if (ventaDetalle.total - monto > 0 && !ventaDetalle.cliente) {
+      alert("Para dejar saldo pendiente la venta tiene que tener cliente");
+      return;
+    }
+
+    const confirmar = window.confirm(
+      "Esto reemplaza los cobros registrados para esta venta y recalcula el saldo. Continuar?",
+    );
+
+    if (!confirmar) return;
+
+    try {
+      setGuardandoPago(true);
+
+      const res = await fetch(`${API}/ventas/${ventaDetalle.id}/pago`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          formaPago: pagoForma,
+          montoPagado: monto,
+          observacionesPago: pagoObservaciones.trim(),
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Error actualizando pago");
+      }
+
+      setVentaDetalle(data);
+      setPagoForma(data.formaPago || "EFECTIVO");
+      setPagoMonto(String(data.montoPagado || 0));
+      setPagoObservaciones(data.observacionesPago || "");
+      setPagoEditOpen(false);
+      await cargarVentas();
+    } catch (error) {
+      console.error(error);
+      alert(error.message);
+    } finally {
+      setGuardandoPago(false);
+    }
   }
 
   async function eliminarVenta() {
@@ -528,7 +626,7 @@ export default function HistorialVentas() {
         <>
           <div
             style={styles.overlay}
-            onClick={eliminandoVenta ? undefined : cerrarDetalle}
+            onClick={eliminandoVenta || guardandoPago ? undefined : cerrarDetalle}
           ></div>
 
           <div style={styles.modal}>
@@ -549,6 +647,104 @@ export default function HistorialVentas() {
                 {formatearFormaPago(ventaDetalle.formaPago)} -{" "}
                 {formatearEstadoPago(ventaDetalle.estadoPago)}
               </div>
+            </div>
+
+            <div style={styles.pagoEditorBox}>
+              <div style={styles.pagoEditorHeader}>
+                <strong>Estado de pago</strong>
+                {!pagoEditOpen && (
+                  <button
+                    style={styles.btnSecundario}
+                    onClick={abrirEditorPago}
+                    disabled={eliminandoVenta || guardandoPago}
+                    type="button"
+                  >
+                    Corregir pago
+                  </button>
+                )}
+              </div>
+
+              {pagoEditOpen && (
+                <div style={styles.pagoEditorForm}>
+                  <div style={styles.pagoGrid}>
+                    <div>
+                      <label style={styles.label}>Forma de pago</label>
+                      <select
+                        style={styles.input}
+                        value={pagoForma}
+                        disabled={guardandoPago}
+                        onChange={(e) => {
+                          setPagoForma(e.target.value);
+                          if (e.target.value === "CUENTA_CORRIENTE") {
+                            setPagoMonto("0");
+                          }
+                        }}
+                      >
+                        {FORMAS_PAGO.map((forma) => (
+                          <option key={forma.value} value={forma.value}>
+                            {forma.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={styles.label}>Monto pagado</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={ventaDetalle.total}
+                        style={styles.input}
+                        value={pagoMonto}
+                        disabled={
+                          guardandoPago || pagoForma === "CUENTA_CORRIENTE"
+                        }
+                        onChange={(e) => setPagoMonto(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <textarea
+                    style={styles.textarea}
+                    placeholder="Observaciones de pago"
+                    value={pagoObservaciones}
+                    disabled={guardandoPago}
+                    onChange={(e) => setPagoObservaciones(e.target.value)}
+                  />
+
+                  <div style={styles.pagoEditorActions}>
+                    <button
+                      style={styles.btnSecundario}
+                      onClick={dejarVentaPendiente}
+                      disabled={guardandoPago}
+                      type="button"
+                    >
+                      Dejar pendiente
+                    </button>
+                    <button
+                      style={styles.btnSecundario}
+                      onClick={() => setPagoEditOpen(false)}
+                      disabled={guardandoPago}
+                      type="button"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      style={styles.btnPrincipal}
+                      onClick={guardarPagoVenta}
+                      disabled={guardandoPago}
+                      type="button"
+                    >
+                      <LoadingContent
+                        loading={guardandoPago}
+                        loadingText="Guardando..."
+                      >
+                        Guardar pago
+                      </LoadingContent>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={styles.detalleLista}>
@@ -598,7 +794,7 @@ export default function HistorialVentas() {
               <button
                 style={styles.btnSecundario}
                 onClick={cerrarDetalle}
-                disabled={eliminandoVenta}
+                disabled={eliminandoVenta || guardandoPago}
               >
                 Cerrar
               </button>
@@ -606,7 +802,7 @@ export default function HistorialVentas() {
               <button
                 style={styles.btnDanger}
                 onClick={eliminarVenta}
-                disabled={eliminandoVenta}
+                disabled={eliminandoVenta || guardandoPago}
               >
                 <LoadingContent
                   loading={eliminandoVenta}
@@ -619,7 +815,7 @@ export default function HistorialVentas() {
               <button
                 style={styles.btnPrincipal}
                 onClick={() => descargarPDF(ventaDetalle)}
-                disabled={eliminandoVenta}
+                disabled={eliminandoVenta || guardandoPago}
               >
                 Descargar PDF
               </button>
@@ -664,6 +860,16 @@ const styles = {
     border: "1px solid var(--border-strong)",
     fontSize: 15,
     boxSizing: "border-box",
+  },
+  textarea: {
+    width: "100%",
+    minHeight: 72,
+    padding: 10,
+    borderRadius: 10,
+    border: "1px solid var(--border-strong)",
+    fontSize: 14,
+    boxSizing: "border-box",
+    resize: "vertical",
   },
   dateInput: {
     minHeight: 42,
@@ -798,6 +1004,34 @@ const styles = {
     flexDirection: "column",
     gap: 6,
     fontSize: 14,
+  },
+  pagoEditorBox: {
+    border: "1px solid var(--border-subtle)",
+    borderRadius: 10,
+    padding: 10,
+  },
+  pagoEditorHeader: {
+    alignItems: "center",
+    display: "flex",
+    gap: 10,
+    justifyContent: "space-between",
+  },
+  pagoEditorForm: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    marginTop: 10,
+  },
+  pagoGrid: {
+    display: "grid",
+    gap: 10,
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  },
+  pagoEditorActions: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "flex-end",
   },
   detalleLista: {
     display: "flex",
