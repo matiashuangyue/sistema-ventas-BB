@@ -1,5 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { API_URL as API } from "../../config/api";
+import LoadingContent from "../../components/LoadingContent";
+
+const COBRANZAS_PAGE_SIZE = 10;
+
+const TOTALES_INICIALES = {
+  saldoPendiente: 0,
+  clientesConSaldo: 0,
+  ventasPendientes: 0,
+};
 
 const FORMAS_COBRO = [
   { value: "EFECTIVO", label: "Efectivo" },
@@ -36,8 +45,52 @@ function formatearFormaPago(formaPago) {
   return labels[formaPago] || "Efectivo";
 }
 
-async function obtenerResumenCobranzas(cliente = "") {
+function calcularTotales(clientes) {
+  return clientes.reduce(
+    (acc, cliente) => ({
+      saldoPendiente: acc.saldoPendiente + cliente.saldoPendiente,
+      clientesConSaldo:
+        acc.clientesConSaldo + (cliente.saldoPendiente > 0 ? 1 : 0),
+      ventasPendientes:
+        acc.ventasPendientes + cliente.cantidadVentasPendientes,
+    }),
+    TOTALES_INICIALES,
+  );
+}
+
+function normalizarRespuestaResumen(data, page, limit) {
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      page: 1,
+      limit: data.length || limit,
+      total: data.length,
+      totalPages: 1,
+      totales: calcularTotales(data),
+    };
+  }
+
+  const items = Array.isArray(data.items) ? data.items : [];
+
+  return {
+    items,
+    page: Number(data.page || page),
+    limit: Number(data.limit || limit),
+    total: Number(data.total || 0),
+    totalPages: Math.max(1, Number(data.totalPages || 1)),
+    totales: data.totales || calcularTotales(items),
+  };
+}
+
+async function obtenerResumenCobranzas(
+  cliente = "",
+  page = 1,
+  limit = COBRANZAS_PAGE_SIZE,
+) {
   const params = new URLSearchParams();
+
+  params.set("page", String(Math.max(1, Number(page) || 1)));
+  params.set("limit", String(limit));
 
   if (cliente.trim()) {
     params.append("cliente", cliente.trim());
@@ -60,6 +113,10 @@ export default function Cobranzas() {
   const [loading, setLoading] = useState(false);
   const [cuenta, setCuenta] = useState(null);
   const [loadingCuenta, setLoadingCuenta] = useState(false);
+  const [paginaClientes, setPaginaClientes] = useState(1);
+  const [totalClientes, setTotalClientes] = useState(0);
+  const [totalPaginasClientes, setTotalPaginasClientes] = useState(1);
+  const [totales, setTotales] = useState(TOTALES_INICIALES);
 
   const [ventaCobro, setVentaCobro] = useState(null);
   const [montoCobro, setMontoCobro] = useState("");
@@ -73,10 +130,19 @@ export default function Cobranzas() {
     const timeout = setTimeout(async () => {
       try {
         setLoading(true);
-        const data = await obtenerResumenCobranzas(busqueda);
+        const data = await obtenerResumenCobranzas(busqueda, paginaClientes);
+        const respuesta = normalizarRespuestaResumen(
+          data,
+          paginaClientes,
+          COBRANZAS_PAGE_SIZE,
+        );
 
         if (!cancelado) {
-          setClientes(data);
+          setClientes(respuesta.items);
+          setPaginaClientes(respuesta.page);
+          setTotalClientes(respuesta.total);
+          setTotalPaginasClientes(respuesta.totalPages);
+          setTotales(respuesta.totales);
         }
       } catch (error) {
         console.error(error);
@@ -92,22 +158,7 @@ export default function Cobranzas() {
       cancelado = true;
       clearTimeout(timeout);
     };
-  }, [busqueda]);
-
-  const totales = useMemo(
-    () =>
-      clientes.reduce(
-        (acc, cliente) => ({
-          saldoPendiente: acc.saldoPendiente + cliente.saldoPendiente,
-          clientesConSaldo:
-            acc.clientesConSaldo + (cliente.saldoPendiente > 0 ? 1 : 0),
-          ventasPendientes:
-            acc.ventasPendientes + cliente.cantidadVentasPendientes,
-        }),
-        { saldoPendiente: 0, clientesConSaldo: 0, ventasPendientes: 0 },
-      ),
-    [clientes],
-  );
+  }, [busqueda, paginaClientes]);
 
   async function verCuenta(clienteId) {
     try {
@@ -145,6 +196,23 @@ export default function Cobranzas() {
     setObservacionesCobro("");
   }
 
+  function aplicarResumen(respuesta) {
+    setClientes(respuesta.items);
+    setPaginaClientes(respuesta.page);
+    setTotalClientes(respuesta.total);
+    setTotalPaginasClientes(respuesta.totalPages);
+    setTotales(respuesta.totales);
+  }
+
+  function cambiarPaginaClientes(nuevaPagina) {
+    const pagina = Math.min(
+      Math.max(1, nuevaPagina),
+      totalPaginasClientes,
+    );
+
+    setPaginaClientes(pagina);
+  }
+
   async function registrarCobro() {
     if (!ventaCobro) return;
 
@@ -180,7 +248,14 @@ export default function Cobranzas() {
       }
 
       setCuenta(data);
-      setClientes(await obtenerResumenCobranzas(busqueda));
+      const resumen = await obtenerResumenCobranzas(busqueda, paginaClientes);
+      aplicarResumen(
+        normalizarRespuestaResumen(
+          resumen,
+          paginaClientes,
+          COBRANZAS_PAGE_SIZE,
+        ),
+      );
       cerrarCobro();
     } catch (error) {
       console.error(error);
@@ -202,7 +277,10 @@ export default function Cobranzas() {
           style={styles.input}
           placeholder="Nombre, telefono, CUIT..."
           value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
+          onChange={(e) => {
+            setBusqueda(e.target.value);
+            setPaginaClientes(1);
+          }}
         />
       </div>
 
@@ -227,7 +305,11 @@ export default function Cobranzas() {
         <section style={styles.panel}>
           <h3 style={styles.panelTitle}>Clientes</h3>
 
-          {loading && <div style={styles.empty}>Cargando cobranzas...</div>}
+          {loading && (
+            <div style={styles.empty}>
+              <LoadingContent loading={true} loadingText="Cargando cobranzas..." />
+            </div>
+          )}
 
           {!loading && clientes.length === 0 && (
             <div style={styles.empty}>No hay clientes para mostrar.</div>
@@ -264,12 +346,41 @@ export default function Cobranzas() {
                 </div>
               </button>
             ))}
+
+          {!loading && totalPaginasClientes > 1 && (
+            <div style={styles.pagination}>
+              <button
+                style={styles.btnSecundario}
+                onClick={() => cambiarPaginaClientes(paginaClientes - 1)}
+                disabled={loading || paginaClientes <= 1}
+                type="button"
+              >
+                Anterior
+              </button>
+              <span style={styles.paginationText}>
+                Pagina {paginaClientes} de {totalPaginasClientes}
+                {totalClientes > 0 ? ` (${totalClientes} clientes)` : ""}
+              </span>
+              <button
+                style={styles.btnSecundario}
+                onClick={() => cambiarPaginaClientes(paginaClientes + 1)}
+                disabled={loading || paginaClientes >= totalPaginasClientes}
+                type="button"
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
         </section>
 
         <section style={styles.panel}>
           <h3 style={styles.panelTitle}>Cuenta corriente</h3>
 
-          {loadingCuenta && <div style={styles.empty}>Cargando detalle...</div>}
+          {loadingCuenta && (
+            <div style={styles.empty}>
+              <LoadingContent loading={true} loadingText="Cargando detalle..." />
+            </div>
+          )}
 
           {!loadingCuenta && !cuenta && (
             <div style={styles.empty}>
@@ -390,6 +501,7 @@ export default function Cobranzas() {
               max={ventaCobro.saldoPendiente}
               style={styles.input}
               value={montoCobro}
+              disabled={registrandoCobro}
               onChange={(e) => setMontoCobro(e.target.value)}
             />
 
@@ -397,6 +509,7 @@ export default function Cobranzas() {
             <select
               style={styles.input}
               value={formaCobro}
+              disabled={registrandoCobro}
               onChange={(e) => setFormaCobro(e.target.value)}
             >
               {FORMAS_COBRO.map((forma) => (
@@ -410,6 +523,7 @@ export default function Cobranzas() {
               style={styles.textarea}
               placeholder="Observaciones (opcional)"
               value={observacionesCobro}
+              disabled={registrandoCobro}
               onChange={(e) => setObservacionesCobro(e.target.value)}
             />
 
@@ -428,7 +542,12 @@ export default function Cobranzas() {
                 disabled={registrandoCobro}
                 type="button"
               >
-                {registrandoCobro ? "Guardando..." : "Guardar cobro"}
+                <LoadingContent
+                  loading={registrandoCobro}
+                  loadingText="Guardando..."
+                >
+                  Guardar cobro
+                </LoadingContent>
               </button>
             </div>
           </div>
@@ -488,7 +607,12 @@ const styles = {
   },
   metricaLabel: { fontSize: 12, color: "var(--text-muted)" },
   metricaValor: { fontSize: 18 },
-  contenido: { display: "grid", gridTemplateColumns: "1fr", gap: 12 },
+  contenido: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: 12,
+    alignItems: "start",
+  },
   panel: {
     background: "var(--surface)",
     border: "1px solid var(--border)",
@@ -542,6 +666,19 @@ const styles = {
   },
   saldoPendiente: { color: "var(--danger)", fontWeight: 700 },
   saldoCero: { color: "var(--success)", fontWeight: 700 },
+  pagination: {
+    alignItems: "center",
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 10,
+    justifyContent: "center",
+    padding: "4px 0",
+  },
+  paginationText: {
+    color: "var(--text-soft)",
+    fontSize: 13,
+    fontWeight: 600,
+  },
   detalle: { display: "flex", flexDirection: "column", gap: 14 },
   detalleHeader: {
     display: "flex",

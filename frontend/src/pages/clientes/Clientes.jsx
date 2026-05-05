@@ -1,10 +1,61 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { API_URL as API } from "../../config/api";
 import LoadingContent from "../../components/LoadingContent";
+
+const CLIENTES_PAGE_SIZE = 10;
+
+function normalizarRespuestaClientes(data, page, limit) {
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      page: 1,
+      limit: data.length || limit,
+      total: data.length,
+      totalPages: 1,
+    };
+  }
+
+  return {
+    items: Array.isArray(data.items) ? data.items : [],
+    page: Number(data.page || page),
+    limit: Number(data.limit || limit),
+    total: Number(data.total || 0),
+    totalPages: Math.max(1, Number(data.totalPages || 1)),
+  };
+}
+
+async function obtenerClientes({
+  search = "",
+  page = 1,
+  limit = CLIENTES_PAGE_SIZE,
+} = {}) {
+  const params = new URLSearchParams({
+    page: String(Math.max(1, Number(page) || 1)),
+    limit: String(limit),
+  });
+  const texto = search.trim();
+
+  if (texto) {
+    params.set("search", texto);
+  }
+
+  const res = await fetch(`${API}/clientes?${params.toString()}`);
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.error || "Error cargando clientes");
+  }
+
+  return data;
+}
 
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
   const [busqueda, setBusqueda] = useState("");
+  const [cargandoClientes, setCargandoClientes] = useState(true);
+  const [paginaClientes, setPaginaClientes] = useState(1);
+  const [totalClientes, setTotalClientes] = useState(0);
+  const [totalPaginasClientes, setTotalPaginasClientes] = useState(1);
   const [guardandoCliente, setGuardandoCliente] = useState(false);
 
   const [modalNuevoOpen, setModalNuevoOpen] = useState(false);
@@ -21,37 +72,68 @@ export default function Clientes() {
   const [observaciones, setObservaciones] = useState("");
 
   useEffect(() => {
-    cargarClientes();
-  }, []);
+    let cancelado = false;
 
-  async function cargarClientes() {
-    try {
-      const res = await fetch(`${API}/clientes`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error cargando clientes");
-      setClientes(data);
-    } catch (error) {
-      console.error(error);
-      alert(error.message);
-    }
+    const timeout = setTimeout(async () => {
+      try {
+        setCargandoClientes(true);
+        const data = await obtenerClientes({
+          search: busqueda,
+          page: paginaClientes,
+        });
+        const respuesta = normalizarRespuestaClientes(
+          data,
+          paginaClientes,
+          CLIENTES_PAGE_SIZE,
+        );
+
+        if (!cancelado) {
+          setClientes(respuesta.items);
+          setPaginaClientes(respuesta.page);
+          setTotalClientes(respuesta.total);
+          setTotalPaginasClientes(respuesta.totalPages);
+        }
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+      } finally {
+        if (!cancelado) {
+          setCargandoClientes(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelado = true;
+      clearTimeout(timeout);
+    };
+  }, [busqueda, paginaClientes]);
+
+  function aplicarRespuestaClientes(respuesta) {
+    setClientes(respuesta.items);
+    setPaginaClientes(respuesta.page);
+    setTotalClientes(respuesta.total);
+    setTotalPaginasClientes(respuesta.totalPages);
   }
 
-  const clientesFiltrados = useMemo(() => {
-    const texto = busqueda.trim().toLowerCase();
-    if (!texto) return clientes;
-
-    return clientes.filter((cliente) => {
-      const combinado = `
-        ${cliente.nombre || ""}
-        ${cliente.email || ""}
-        ${cliente.telefono || ""}
-        ${cliente.direccion || ""}
-        ${cliente.localidad || ""}
-        ${cliente.cuit || ""}
-      `.toLowerCase();
-      return combinado.includes(texto);
+  async function recargarClientesActuales() {
+    const data = await obtenerClientes({
+      search: busqueda,
+      page: paginaClientes,
     });
-  }, [clientes, busqueda]);
+    aplicarRespuestaClientes(
+      normalizarRespuestaClientes(data, paginaClientes, CLIENTES_PAGE_SIZE),
+    );
+  }
+
+  function cambiarPaginaClientes(nuevaPagina) {
+    const pagina = Math.min(
+      Math.max(1, nuevaPagina),
+      totalPaginasClientes,
+    );
+
+    setPaginaClientes(pagina);
+  }
 
   function limpiarFormulario() {
     setNombre("");
@@ -114,7 +196,7 @@ export default function Clientes() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error creando cliente");
 
-      await cargarClientes();
+      await recargarClientesActuales();
       cerrarModalNuevo();
     } catch (error) {
       alert(error.message);
@@ -145,7 +227,7 @@ export default function Clientes() {
 
       if (!res.ok) throw new Error("Error editando cliente");
 
-      await cargarClientes();
+      await recargarClientesActuales();
       cerrarModalEditar();
     } catch (error) {
       alert(error.message);
@@ -166,12 +248,25 @@ export default function Clientes() {
           style={styles.input}
           placeholder="Buscar por nombre, mail, CUIT..."
           value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
+          onChange={(e) => {
+            setBusqueda(e.target.value);
+            setPaginaClientes(1);
+          }}
         />
       </div>
 
       <div style={styles.lista}>
-        {clientesFiltrados.map((cliente) => (
+        {cargandoClientes && (
+          <div style={styles.empty}>
+            <LoadingContent loading={true} loadingText="Cargando clientes..." />
+          </div>
+        )}
+
+        {!cargandoClientes && clientes.length === 0 && (
+          <div style={styles.empty}>No hay clientes para mostrar.</div>
+        )}
+
+        {!cargandoClientes && clientes.map((cliente) => (
           <div key={cliente.id} style={styles.card}>
             <div style={styles.linea1}>
               <div style={styles.nombre}>{cliente.nombre}</div>
@@ -190,6 +285,31 @@ export default function Clientes() {
             )}
           </div>
         ))}
+
+        {!cargandoClientes && totalPaginasClientes > 1 && (
+          <div style={styles.pagination}>
+            <button
+              style={styles.btnSecundario}
+              onClick={() => cambiarPaginaClientes(paginaClientes - 1)}
+              disabled={paginaClientes <= 1}
+              type="button"
+            >
+              Anterior
+            </button>
+            <span style={styles.paginationText}>
+              Pagina {paginaClientes} de {totalPaginasClientes}
+              {totalClientes > 0 ? ` (${totalClientes} clientes)` : ""}
+            </span>
+            <button
+              style={styles.btnSecundario}
+              onClick={() => cambiarPaginaClientes(paginaClientes + 1)}
+              disabled={paginaClientes >= totalPaginasClientes}
+              type="button"
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MODAL (Nuevo / Editar) */}
@@ -251,6 +371,7 @@ const styles = {
   input: { width: "100%", padding: 12, borderRadius: 10, border: "1px solid var(--border-strong)", fontSize: 15, boxSizing: "border-box" },
   textarea: { width: "100%", minHeight: 80, padding: 10, borderRadius: 10, border: "1px solid var(--border-strong)", fontSize: 15, boxSizing: "border-box", resize: "none" },
   lista: { display: "flex", flexDirection: "column", gap: 10 },
+  empty: { background: "var(--surface-soft)", border: "1px solid var(--border-subtle)", borderRadius: 10, padding: 12, color: "var(--text-muted)" },
   card: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 8 },
   linea1: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   nombre: { fontWeight: 700, fontSize: 16, color: "var(--text)" },
@@ -260,6 +381,8 @@ const styles = {
   btnNuevo: { border: "none", borderRadius: 10, background: "var(--primary)", color: "var(--text-inverse)", padding: "10px 16px", fontWeight: 600, cursor: "pointer" },
   btnEditar: { border: "1px solid var(--border-strong)", borderRadius: 8, background: "var(--surface)", color: "var(--text-soft)", padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   btnSecundario: { border: "1px solid var(--border-strong)", borderRadius: 10, background: "var(--surface)", padding: "10px 16px", fontWeight: 600, cursor: "pointer" },
+  pagination: { alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", padding: "4px 0" },
+  paginationText: { color: "var(--text-soft)", fontSize: 13, fontWeight: 600 },
   overlay: { position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.46)", zIndex: 999 },
   modal: { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "90%", maxWidth: 450, background: "var(--surface)", borderRadius: 16, padding: 20, zIndex: 1000, display: "flex", flexDirection: "column", gap: 12, maxHeight: "90vh", overflowY: "auto" },
   modalTitle: { margin: "0 0 8px 0", fontSize: 18 },

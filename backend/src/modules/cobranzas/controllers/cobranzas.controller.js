@@ -10,6 +10,8 @@ router.get("/resumen", async (req, res) => {
   try {
     const resumen = await cobranzasService.listarResumen({
       cliente: req.query.cliente,
+      page: req.query.page,
+      limit: req.query.limit,
     });
     res.json(resumen);
   } catch (error) {

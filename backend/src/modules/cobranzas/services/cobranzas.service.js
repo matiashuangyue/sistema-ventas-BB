@@ -35,6 +35,14 @@ function calcularEstadoPago(total, montoPagado) {
   return "PAGADA";
 }
 
+function normalizarEntero(valor, fallback, { min = 1, max = 100 } = {}) {
+  const numero = Number(valor);
+
+  if (!Number.isInteger(numero)) return fallback;
+
+  return Math.min(Math.max(numero, min), max);
+}
+
 function mapResumenCliente(cliente) {
   const saldoPendiente = redondearMonto(
     cliente.ventas.reduce((acc, venta) => acc + venta.saldoPendiente, 0),
@@ -144,11 +152,31 @@ function construirVentasPendientes(ventas) {
     .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 }
 
+function calcularTotalesResumen(clientes) {
+  const totales = clientes.reduce(
+    (acc, cliente) => ({
+      saldoPendiente: acc.saldoPendiente + cliente.saldoPendiente,
+      clientesConSaldo:
+        acc.clientesConSaldo + (cliente.saldoPendiente > 0 ? 1 : 0),
+      ventasPendientes:
+        acc.ventasPendientes + cliente.cantidadVentasPendientes,
+    }),
+    { saldoPendiente: 0, clientesConSaldo: 0, ventasPendientes: 0 },
+  );
+
+  return {
+    ...totales,
+    saldoPendiente: redondearMonto(totales.saldoPendiente),
+  };
+}
+
 async function listarResumen(filtros = {}) {
   logger.info("Se inicia la consulta de resumen de cobranzas", {
     cliente: filtros.cliente || null,
   });
 
+  const page = normalizarEntero(filtros.page, 1, { min: 1, max: 100000 });
+  const limit = normalizarEntero(filtros.limit, 10, { min: 1, max: 100 });
   const clientes = await cobranzasRepository.findClientesConCuenta(
     filtros.cliente,
   );
@@ -169,9 +197,24 @@ async function listarResumen(filtros = {}) {
       return a.nombre.localeCompare(b.nombre);
     });
 
-  logger.info(`Resumen de cobranzas finalizado con ${resumen.length} clientes`);
+  const total = resumen.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const paginaActual = Math.min(page, totalPages);
+  const inicio = (paginaActual - 1) * limit;
+  const items = resumen.slice(inicio, inicio + limit);
 
-  return resumen;
+  logger.info(
+    `Resumen de cobranzas finalizado con ${items.length} de ${total} clientes`,
+  );
+
+  return {
+    items,
+    page: paginaActual,
+    limit,
+    total,
+    totalPages,
+    totales: calcularTotalesResumen(resumen),
+  };
 }
 
 async function obtenerCuentaCorriente(clienteId) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { API_URL as API } from "../../config/api";
 import LoadingContent from "../../components/LoadingContent";
 import { getToken } from "../../services/auth";
@@ -7,6 +7,7 @@ const VARIANTES_PAGE_SIZE = 25;
 
 export default function Productos() {
   const token = getToken();
+  const filtrosInicializadosRef = useRef(false);
 
   const [variantes, setVariantes] = useState([]);
   const [productosBase, setProductosBase] = useState([]);
@@ -257,6 +258,11 @@ export default function Productos() {
 
   useEffect(() => {
     if (!catalogoInicialListo) return;
+
+    if (!filtrosInicializadosRef.current) {
+      filtrosInicializadosRef.current = true;
+      return;
+    }
 
     const timeout = setTimeout(() => {
       cargarVariantes({

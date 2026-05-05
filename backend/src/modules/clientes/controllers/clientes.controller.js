@@ -24,7 +24,7 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const clientes = await clientesService.listarClientes();
+    const clientes = await clientesService.listarClientes(req.query);
     res.json(clientes);
   } catch (error) {
     handleControllerError(res, error, "Error obteniendo clientes");
