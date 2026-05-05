@@ -119,6 +119,21 @@ function findVentasHistorial(where) {
   });
 }
 
+function findVentasHistorialPage({ where, skip, take }) {
+  return prisma.$transaction([
+    prisma.venta.count({ where }),
+    prisma.venta.findMany({
+      where,
+      orderBy: {
+        fecha: "desc",
+      },
+      include: ventaIncludeDetalle,
+      skip,
+      take,
+    }),
+  ]);
+}
+
 function updateStockVariante(client, id, data) {
   return client.variante.update({
     where: { id },
@@ -167,6 +182,7 @@ module.exports = {
   findVentaWithDetalles,
   findVentas,
   findVentasHistorial,
+  findVentasHistorialPage,
   transaction,
   updateStockVariantesByDeltas,
   updateStockVariante,

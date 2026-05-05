@@ -36,6 +36,14 @@ function calcularEstadoPago(total, montoPagado) {
   return "PAGADA";
 }
 
+function normalizarEntero(valor, fallback, { min = 1, max = 100 } = {}) {
+  const numero = Number(valor);
+
+  if (!Number.isInteger(numero)) return fallback;
+
+  return Math.min(Math.max(numero, min), max);
+}
+
 function calcularPagoInicial(dto, total, formaPago) {
   const montoBase =
     dto.montoPagado == null
@@ -261,6 +269,7 @@ function crearWhereHistorial(dto) {
     where.cliente = {
       nombre: {
         contains: dto.cliente,
+        mode: "insensitive",
       },
     };
   }
@@ -268,18 +277,12 @@ function crearWhereHistorial(dto) {
   return where;
 }
 
-async function obtenerHistorial(dto) {
-  logger.info("Se inicia la consulta de historial de ventas", {
-    desde: dto.desde || null,
-    hasta: dto.hasta || null,
-    cliente: dto.cliente || null,
-  });
+function usaPaginacionHistorial(dto = {}) {
+  return dto.page != null || dto.limit != null;
+}
 
-  const ventas = await ventasRepository.findVentasHistorial(
-    crearWhereHistorial(dto),
-  );
-
-  const historial = ventas.map((venta) => ({
+function mapHistorialVenta(venta) {
+  return {
     id: venta.id,
     fecha: venta.fecha,
     cliente: venta.cliente ? venta.cliente.nombre : "Consumidor Final",
@@ -295,7 +298,63 @@ async function obtenerHistorial(dto) {
       (acc, item) => acc + item.cantidad,
       0,
     ),
-  }));
+  };
+}
+
+async function obtenerHistorial(dto) {
+  logger.info("Se inicia la consulta de historial de ventas", {
+    desde: dto.desde || null,
+    hasta: dto.hasta || null,
+    cliente: dto.cliente || null,
+  });
+
+  const where = crearWhereHistorial(dto);
+
+  if (usaPaginacionHistorial(dto)) {
+    const page = normalizarEntero(dto.page, 1, { min: 1, max: 100000 });
+    const limit = normalizarEntero(dto.limit, 10, { min: 1, max: 100 });
+    const skip = (page - 1) * limit;
+    const [total, ventas] = await ventasRepository.findVentasHistorialPage({
+      where,
+      skip,
+      take: limit,
+    });
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const paginaActual = Math.min(page, totalPages);
+    let ventasPagina = ventas;
+    let totalFinal = total;
+
+    if (page !== paginaActual) {
+      const [totalRecalculado, ventasRecalculadas] =
+        await ventasRepository.findVentasHistorialPage({
+          where,
+          skip: (paginaActual - 1) * limit,
+          take: limit,
+        });
+      ventasPagina = ventasRecalculadas;
+      totalFinal = totalRecalculado;
+    }
+
+    const historial = ventasPagina.map(mapHistorialVenta);
+
+    logger.info(
+      `Historial de ventas finalizado con ${historial.length} de ${totalFinal} registros`,
+    );
+
+    return {
+      items: historial,
+      page: paginaActual,
+      limit,
+      total: totalFinal,
+      totalPages,
+    };
+  }
+
+  const ventas = await ventasRepository.findVentasHistorial(
+    where,
+  );
+
+  const historial = ventas.map(mapHistorialVenta);
 
   logger.info(`Historial de ventas finalizado con ${historial.length} registros`);
 

@@ -4,6 +4,8 @@ import autoTable from "jspdf-autotable";
 import LoadingContent from "../../components/LoadingContent";
 import { API_URL as API } from "../../config/api";
 
+const HISTORIAL_PAGE_SIZE = 10;
+
 function getFechaHoy() {
   const hoy = new Date();
   return hoy.toISOString().split("T")[0];
@@ -45,8 +47,37 @@ function formatearEstadoPago(estadoPago) {
   return labels[estadoPago] || "Pagada";
 }
 
-async function obtenerHistorialVentas({ desde, hasta, cliente }) {
+function normalizarRespuestaHistorial(data, page, limit) {
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      page: 1,
+      limit: data.length || limit,
+      total: data.length,
+      totalPages: 1,
+    };
+  }
+
+  return {
+    items: Array.isArray(data.items) ? data.items : [],
+    page: Number(data.page || page),
+    limit: Number(data.limit || limit),
+    total: Number(data.total || 0),
+    totalPages: Math.max(1, Number(data.totalPages || 1)),
+  };
+}
+
+async function obtenerHistorialVentas({
+  desde,
+  hasta,
+  cliente,
+  page = 1,
+  limit = HISTORIAL_PAGE_SIZE,
+}) {
   const params = new URLSearchParams();
+
+  params.set("page", String(Math.max(1, Number(page) || 1)));
+  params.set("limit", String(limit));
 
   if (desde) params.append("desde", desde);
   if (hasta) params.append("hasta", hasta);
@@ -71,6 +102,9 @@ export default function HistorialVentas() {
   const [loading, setLoading] = useState(false);
   const [eliminandoVenta, setEliminandoVenta] = useState(false);
   const [detalleVentaCargandoId, setDetalleVentaCargandoId] = useState(null);
+  const [paginaVentas, setPaginaVentas] = useState(1);
+  const [totalVentas, setTotalVentas] = useState(0);
+  const [totalPaginasVentas, setTotalPaginasVentas] = useState(1);
 
   const [ventaDetalle, setVentaDetalle] = useState(null);
   const [detalleOpen, setDetalleOpen] = useState(false);
@@ -85,10 +119,19 @@ export default function HistorialVentas() {
           desde: getFechaHace7Dias(),
           hasta: getFechaHoy(),
           cliente: "",
+          page: 1,
         });
+        const respuesta = normalizarRespuestaHistorial(
+          data,
+          1,
+          HISTORIAL_PAGE_SIZE,
+        );
 
         if (!cancelado) {
-          setVentas(data);
+          setVentas(respuesta.items);
+          setPaginaVentas(respuesta.page);
+          setTotalVentas(respuesta.total);
+          setTotalPaginasVentas(respuesta.totalPages);
         }
       } catch (error) {
         console.error(error);
@@ -107,17 +150,40 @@ export default function HistorialVentas() {
     };
   }, []);
 
-  async function cargarVentas() {
+  function aplicarRespuestaHistorial(respuesta) {
+    setVentas(respuesta.items);
+    setPaginaVentas(respuesta.page);
+    setTotalVentas(respuesta.total);
+    setTotalPaginasVentas(respuesta.totalPages);
+  }
+
+  async function cargarVentas({ page = paginaVentas } = {}) {
     try {
       setLoading(true);
-      const data = await obtenerHistorialVentas({ desde, hasta, cliente });
-      setVentas(data);
+      const data = await obtenerHistorialVentas({
+        desde,
+        hasta,
+        cliente,
+        page,
+      });
+      aplicarRespuestaHistorial(
+        normalizarRespuestaHistorial(data, page, HISTORIAL_PAGE_SIZE),
+      );
     } catch (error) {
       console.error(error);
       alert(error.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  function buscarVentas() {
+    return cargarVentas({ page: 1 });
+  }
+
+  function cambiarPaginaVentas(nuevaPagina) {
+    const page = Math.min(Math.max(1, nuevaPagina), totalPaginasVentas);
+    return cargarVentas({ page });
   }
 
   async function verDetalle(id) {
@@ -312,6 +378,7 @@ export default function HistorialVentas() {
     setCliente("");
     setDesde(getFechaHace7Dias());
     setHasta(getFechaHoy());
+    setPaginaVentas(1);
   }
 
   return (
@@ -326,7 +393,10 @@ export default function HistorialVentas() {
               style={styles.input}
               placeholder="Buscar cliente..."
               value={cliente}
-              onChange={(e) => setCliente(e.target.value)}
+              onChange={(e) => {
+                setCliente(e.target.value);
+                setPaginaVentas(1);
+              }}
             />
           </div>
 
@@ -336,7 +406,10 @@ export default function HistorialVentas() {
               type="date"
               style={{ ...styles.input, ...styles.dateInput }}
               value={desde}
-              onChange={(e) => setDesde(e.target.value)}
+              onChange={(e) => {
+                setDesde(e.target.value);
+                setPaginaVentas(1);
+              }}
             />
           </div>
 
@@ -346,7 +419,10 @@ export default function HistorialVentas() {
               type="date"
               style={{ ...styles.input, ...styles.dateInput }}
               value={hasta}
-              onChange={(e) => setHasta(e.target.value)}
+              onChange={(e) => {
+                setHasta(e.target.value);
+                setPaginaVentas(1);
+              }}
             />
           </div>
         </div>
@@ -358,7 +434,7 @@ export default function HistorialVentas() {
 
           <button
             style={styles.btnPrincipal}
-            onClick={cargarVentas}
+            onClick={buscarVentas}
             disabled={loading}
           >
             <LoadingContent loading={loading} loadingText="Buscando...">
@@ -369,7 +445,11 @@ export default function HistorialVentas() {
       </div>
 
       <div style={styles.lista}>
-        {loading && <div style={styles.empty}>Cargando ventas...</div>}
+        {loading && (
+          <div style={styles.empty}>
+            <LoadingContent loading={true} loadingText="Cargando ventas..." />
+          </div>
+        )}
 
         {!loading && ventas.length === 0 && (
           <div style={styles.empty}>
@@ -417,6 +497,31 @@ export default function HistorialVentas() {
               </div>
             </div>
           ))}
+
+        {!loading && totalPaginasVentas > 1 && (
+          <div style={styles.pagination}>
+            <button
+              style={styles.btnSecundario}
+              onClick={() => cambiarPaginaVentas(paginaVentas - 1)}
+              disabled={paginaVentas <= 1}
+              type="button"
+            >
+              Anterior
+            </button>
+            <span style={styles.paginationText}>
+              Pagina {paginaVentas} de {totalPaginasVentas}
+              {totalVentas > 0 ? ` (${totalVentas} ventas)` : ""}
+            </span>
+            <button
+              style={styles.btnSecundario}
+              onClick={() => cambiarPaginaVentas(paginaVentas + 1)}
+              disabled={paginaVentas >= totalPaginasVentas}
+              type="button"
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
       </div>
 
       {detalleOpen && ventaDetalle && (
@@ -648,6 +753,19 @@ const styles = {
     gap: 8,
     fontSize: 12,
     color: "var(--text-soft)",
+  },
+  pagination: {
+    alignItems: "center",
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 10,
+    justifyContent: "center",
+    padding: "4px 0",
+  },
+  paginationText: {
+    color: "var(--text-soft)",
+    fontSize: 13,
+    fontWeight: 600,
   },
   overlay: {
     position: "fixed",
