@@ -205,8 +205,19 @@ async function crearVenta(dto) {
           throw new AppError(`No hay precio configurado para ${variante.nombre}`);
         }
 
-        const precioAplicado = preciosDisponibles[0];
-        const precioUnitario = precioAplicado.precio;
+        const precioEditado = item.precioEditado;
+        const usarPrecioEditado =
+          precioEditado != null &&
+          Number.isFinite(precioEditado) &&
+          precioEditado > 0;
+
+        if (usarPrecioEditado) {
+          logger.info(
+            `Variante ${varianteId}: precio editado $${precioEditado} (precio de lista: $${preciosDisponibles[0].precio})`,
+          );
+        }
+
+        const precioUnitario = usarPrecioEditado ? precioEditado : preciosDisponibles[0].precio;
         const subtotalItem = precioUnitario * cantidad;
 
         subtotal += subtotalItem;
