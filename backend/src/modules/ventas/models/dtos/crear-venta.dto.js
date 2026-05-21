@@ -8,7 +8,13 @@ class CrearVentaDto {
         ? null
         : Number(body.montoPagado);
     this.observacionesPago = body.observacionesPago;
-    this.items = Array.isArray(body.items) ? body.items : [];
+    this.items = Array.isArray(body.items)
+      ? body.items.map((item) => ({
+          varianteId: item.varianteId,
+          cantidad: item.cantidad,
+          precioEditado: item.precioEditado != null ? Number(item.precioEditado) : null,
+        }))
+      : [];
   }
 
   static from(body) {

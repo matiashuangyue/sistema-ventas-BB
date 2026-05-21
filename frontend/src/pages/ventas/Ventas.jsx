@@ -109,7 +109,8 @@ export default function Ventas() {
   const [confirmandoVenta, setConfirmandoVenta] = useState(false);
   const [resultadoVarianteIds, setResultadoVarianteIds] = useState([]);
   const [buscandoVariantes, setBuscandoVariantes] = useState(false);
-  
+  const [editandoPrecio, setEditandoPrecio] = useState(null);
+
   useEffect(() => {
     carritoRef.current = carrito;
   }, [carrito]);
@@ -387,6 +388,7 @@ export default function Ventas() {
           nombre: variante.nombre,
           productoNombre: variante.producto?.nombre || "",
           cantidad: cantidadElegida,
+          precioEditado: null,
         },
       ];
     });
@@ -444,13 +446,68 @@ export default function Ventas() {
     setCarrito((prev) => prev.filter((item) => item.varianteId !== varianteId));
   }
 
+  function abrirEditarPrecio(varianteId) {
+    setEditandoPrecio({ varianteId, tipo: "porcentaje", valor: "" });
+  }
+
+  function cerrarEditarPrecio() {
+    setEditandoPrecio(null);
+  }
+
+  function aplicarPrecioEditado() {
+    if (!editandoPrecio) return;
+    const { varianteId, tipo, valor } = editandoPrecio;
+    const valorNum = Number(valor);
+
+    if (!valor || isNaN(valorNum) || valorNum < 0) {
+      alert("Ingresá un valor válido");
+      return;
+    }
+
+    if (tipo === "porcentaje" && valorNum > 100) {
+      alert("El descuento no puede ser mayor al 100%");
+      return;
+    }
+
+    const item = carrito.find((i) => i.varianteId === varianteId);
+    if (!item) return;
+
+    const variante = variantes.find((v) => v.id === varianteId);
+    const aplicado = obtenerPrecioAplicado(variante, Number(item.cantidad || 1));
+    const precioBase = aplicado.precioUnitario;
+
+    let nuevoPrecio;
+    if (tipo === "porcentaje") {
+      nuevoPrecio = Math.round(precioBase * (1 - valorNum / 100) * 100) / 100;
+    } else {
+      nuevoPrecio = Math.round(valorNum * 100) / 100;
+    }
+
+    setCarrito((prev) =>
+      prev.map((i) =>
+        i.varianteId === varianteId ? { ...i, precioEditado: nuevoPrecio } : i
+      )
+    );
+
+    setEditandoPrecio(null);
+  }
+
+  function resetearPrecioEditado(varianteId) {
+    setCarrito((prev) =>
+      prev.map((i) =>
+        i.varianteId === varianteId ? { ...i, precioEditado: null } : i
+      )
+    );
+  }
+
   function calcularSubtotal() {
     return carrito.reduce((acc, item) => {
       const variante = variantes.find((v) => v.id === item.varianteId);
       if (!variante || !item.cantidad) return acc;
 
       const aplicado = obtenerPrecioAplicado(variante, Number(item.cantidad));
-      return acc + aplicado.precioUnitario * Number(item.cantidad);
+      const precio = item.precioEditado != null ? item.precioEditado : aplicado.precioUnitario;
+      return acc + precio * Number(item.cantidad);
     }, 0);
   }
 
@@ -537,9 +594,10 @@ export default function Ventas() {
             montoPagado: montoPagadoNumerico,
             observacionesPago: observacionesPago.trim(),
             items: carrito.map((item) => ({
-            varianteId: item.varianteId,
-            cantidad: Number(item.cantidad),
-         })),
+              varianteId: item.varianteId,
+              cantidad: Number(item.cantidad),
+              precioEditado: item.precioEditado ?? null,
+            })),
         }),
       });
 
@@ -751,49 +809,108 @@ export default function Ventas() {
         {carrito.map((item) => {
           const variante = variantes.find((v) => v.id === item.varianteId);
           const aplicado = obtenerPrecioAplicado(variante, Number(item.cantidad || 0));
-          const subtotalItem =
-            aplicado.precioUnitario * Number(item.cantidad || 0);
+          const precioFinal = item.precioEditado != null ? item.precioEditado : aplicado.precioUnitario;
+          const subtotalItem = precioFinal * Number(item.cantidad || 0);
+          const editandoEsteItem = editandoPrecio?.varianteId === item.varianteId;
 
           return (
             <div key={item.varianteId} style={styles.carritoCard}>
-  <div style={styles.carritoLinea1}>
-    <div style={styles.carritoNombreCompleto}>
-      {variante?.producto?.nombre || item.productoNombre || "Producto"} -{" "}
-      {item.nombre}
-    </div>
+              <div style={styles.carritoLinea1}>
+                <div style={styles.carritoNombreCompleto}>
+                  {variante?.producto?.nombre || item.productoNombre || "Producto"} -{" "}
+                  {item.nombre}
+                </div>
 
-    <button
-      style={styles.btnDelete}
-      onClick={() => eliminarItem(item.varianteId)}
-      disabled={confirmandoVenta}
-      title="Eliminar"
-    >
-      🗑
-    </button>
-  </div>
+                <button
+                  style={styles.btnDelete}
+                  onClick={() => eliminarItem(item.varianteId)}
+                  disabled={confirmandoVenta}
+                  title="Eliminar"
+                >
+                  🗑
+                </button>
+              </div>
 
-  <div style={styles.carritoLinea2}>
-    <div style={styles.carritoEscala}>
-      {aplicado.cantidadMinima ? `${aplicado.cantidadMinima}+` : "-"}
-    </div>
+              <div style={styles.carritoLinea2}>
+                <div style={styles.carritoEscala}>
+                  {aplicado.cantidadMinima ? `${aplicado.cantidadMinima}+` : "-"}
+                </div>
 
-    <div style={styles.carritoPrecio}>${aplicado.precioUnitario}</div>
+                <div style={{ ...styles.carritoPrecio, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                  {item.precioEditado != null ? (
+                    <>
+                      <span style={styles.precioOriginalTachado}>${aplicado.precioUnitario}</span>
+                      <span style={styles.precioEditadoActivo}>${item.precioEditado}</span>
+                      <button
+                        style={styles.btnPrecioReset}
+                        onClick={() => resetearPrecioEditado(item.varianteId)}
+                        disabled={confirmandoVenta}
+                        title="Restaurar precio original"
+                      >✕</button>
+                    </>
+                  ) : (
+                    <span>${aplicado.precioUnitario}</span>
+                  )}
+                  <button
+                    style={editandoEsteItem ? styles.btnPrecioEditarActivo : styles.btnPrecioEditar}
+                    onClick={() => editandoEsteItem ? cerrarEditarPrecio() : abrirEditarPrecio(item.varianteId)}
+                    disabled={confirmandoVenta}
+                    title="Descuento especial"
+                  >%</button>
+                </div>
 
-    <input
-      type="number"
-      min="1"
-      style={styles.carritoCantidad}
-      value={item.cantidad}
-      disabled={confirmandoVenta}
-      onChange={(e) =>
-        cambiarCantidadCarrito(item.varianteId, e.target.value)
-      }
-      onBlur={normalizarCantidadesCarrito}
-    />
+                <input
+                  type="number"
+                  min="1"
+                  style={styles.carritoCantidad}
+                  value={item.cantidad}
+                  disabled={confirmandoVenta}
+                  onChange={(e) =>
+                    cambiarCantidadCarrito(item.varianteId, e.target.value)
+                  }
+                  onBlur={normalizarCantidadesCarrito}
+                />
 
-    <div style={styles.carritoSubtotal}>${subtotalItem}</div>
-  </div>
-</div>
+                <div style={styles.carritoSubtotal}>${subtotalItem}</div>
+              </div>
+
+              {editandoEsteItem && (
+                <div style={styles.carritoEditarPrecio}>
+                  <div style={styles.editarTipoGroup}>
+                    <button
+                      style={editandoPrecio.tipo === "porcentaje" ? styles.editarTipoActivo : styles.editarTipoInactivo}
+                      onClick={() => setEditandoPrecio((prev) => ({ ...prev, tipo: "porcentaje", valor: "" }))}
+                    >
+                      % Descuento
+                    </button>
+                    <button
+                      style={editandoPrecio.tipo === "monto" ? styles.editarTipoActivo : styles.editarTipoInactivo}
+                      onClick={() => setEditandoPrecio((prev) => ({ ...prev, tipo: "monto", valor: "" }))}
+                    >
+                      $ Precio directo
+                    </button>
+                  </div>
+                  <div style={styles.editarInputGroup}>
+                    <input
+                      type="number"
+                      min="0"
+                      style={styles.editarPrecioInput}
+                      placeholder={editandoPrecio.tipo === "porcentaje" ? "ej. 10 (10% off)" : "ej. 150"}
+                      value={editandoPrecio.valor}
+                      onChange={(e) => setEditandoPrecio((prev) => ({ ...prev, valor: e.target.value }))}
+                      onKeyDown={(e) => e.key === "Enter" && aplicarPrecioEditado()}
+                      autoFocus
+                    />
+                    <button style={styles.btnAplicarPrecio} onClick={aplicarPrecioEditado}>
+                      Aplicar
+                    </button>
+                    <button style={styles.btnCancelarPrecio} onClick={cerrarEditarPrecio}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -1045,6 +1162,127 @@ btnDelete: {
   fontSize: 18,
   cursor: "pointer",
   padding: 0,
+},
+
+btnPrecioEditar: {
+  border: "1px solid var(--border-strong)",
+  borderRadius: 6,
+  background: "transparent",
+  color: "var(--text-soft)",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  padding: "1px 5px",
+  lineHeight: 1.4,
+},
+
+btnPrecioEditarActivo: {
+  border: "1px solid var(--primary)",
+  borderRadius: 6,
+  background: "var(--primary-soft)",
+  color: "var(--primary)",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  padding: "1px 5px",
+  lineHeight: 1.4,
+},
+
+btnPrecioReset: {
+  border: "none",
+  background: "transparent",
+  color: "var(--text-muted)",
+  fontSize: 11,
+  cursor: "pointer",
+  padding: "1px 3px",
+  lineHeight: 1,
+},
+
+precioOriginalTachado: {
+  textDecoration: "line-through",
+  color: "var(--text-muted)",
+  fontSize: 11,
+},
+
+precioEditadoActivo: {
+  color: "var(--warning)",
+  fontWeight: 700,
+  fontSize: 13,
+},
+
+carritoEditarPrecio: {
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  padding: "8px 10px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  marginTop: 2,
+},
+
+editarTipoGroup: {
+  display: "flex",
+  gap: 6,
+},
+
+editarTipoActivo: {
+  border: "1px solid var(--primary)",
+  borderRadius: 6,
+  background: "var(--primary-soft)",
+  color: "var(--primary)",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  padding: "4px 10px",
+},
+
+editarTipoInactivo: {
+  border: "1px solid var(--border-strong)",
+  borderRadius: 6,
+  background: "transparent",
+  color: "var(--text-soft)",
+  fontSize: 12,
+  cursor: "pointer",
+  padding: "4px 10px",
+},
+
+editarInputGroup: {
+  display: "flex",
+  gap: 6,
+  alignItems: "center",
+},
+
+editarPrecioInput: {
+  flex: 1,
+  padding: "6px 8px",
+  borderRadius: 6,
+  border: "1px solid var(--border-strong)",
+  fontSize: 13,
+  boxSizing: "border-box",
+},
+
+btnAplicarPrecio: {
+  border: "none",
+  borderRadius: 6,
+  background: "var(--primary)",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  padding: "6px 12px",
+  whiteSpace: "nowrap",
+},
+
+btnCancelarPrecio: {
+  border: "1px solid var(--border-strong)",
+  borderRadius: 6,
+  background: "transparent",
+  color: "var(--text-soft)",
+  fontSize: 12,
+  cursor: "pointer",
+  padding: "6px 10px",
+  whiteSpace: "nowrap",
 },
   resumenRow: {
     display: "flex",
