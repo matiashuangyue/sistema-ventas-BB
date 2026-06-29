@@ -14,6 +14,10 @@ const FORMAS_PAGO = [
   { value: "OTRO", label: "Otro" },
 ];
 
+const DATOS_TRANSFERENCIA = {
+  alias: "COMPLETAR_ALIAS",
+};
+
 function getFechaHoy() {
   const hoy = new Date();
   return hoy.toISOString().split("T")[0];
@@ -346,6 +350,18 @@ export default function HistorialVentas() {
     doc.text(`Saldo: $${venta.saldoPendiente || 0}`, margenDerecho, finalY + 38, {
       align: "right",
     });
+
+    if (DATOS_TRANSFERENCIA.alias.trim()) {
+      const bloqueTransferenciaY = finalY + 54;
+
+      doc.setDrawColor(220);
+      doc.roundedRect(14, bloqueTransferenciaY - 8, 182, 18, 2, 2);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Datos para transferencia", 18, bloqueTransferenciaY - 1);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Alias: ${DATOS_TRANSFERENCIA.alias}`, 18, bloqueTransferenciaY + 6);
+    }
 
     // Guardar el PDF
     doc.save(`venta-${venta.id}.pdf`);
