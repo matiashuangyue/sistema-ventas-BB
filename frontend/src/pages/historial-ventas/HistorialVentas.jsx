@@ -15,7 +15,7 @@ const FORMAS_PAGO = [
 ];
 
 const DATOS_TRANSFERENCIA = {
-  alias: "COMPLETAR_ALIAS",
+  alias: "BautiBeni",
 };
 
 function getFechaHoy() {
