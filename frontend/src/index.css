@@ -209,3 +209,19 @@ strong {
     --topbar-height: 58px;
   }
 }
+
+@media (max-width: 520px) {
+  .venta-resultado-linea2 {
+    grid-template-columns: minmax(0, 1fr) auto auto !important;
+  }
+
+  .venta-resultado-escalas {
+    grid-column: 1 / -1;
+  }
+
+  .venta-carrito-linea2 {
+    display: flex !important;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+}

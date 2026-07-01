@@ -350,6 +350,18 @@ export default function Ventas() {
     }));
   }
 
+  function ajustarCantidadBusqueda(variante, diferencia) {
+    setCantidadesBusqueda((prev) => {
+      const cantidadActual = Number(prev[variante.id] || 1);
+      const nuevaCantidad = Math.min(
+        variante.stock,
+        Math.max(1, cantidadActual + diferencia),
+      );
+
+      return { ...prev, [variante.id]: nuevaCantidad };
+    });
+  }
+
   function agregarAlCarrito(variante) {
     const cantidadElegida = Number(cantidadesBusqueda[variante.id] || 1);
 
@@ -398,11 +410,6 @@ export default function Ventas() {
       [variante.id]: 1,
     }));
 
-    setBusqueda("");
-
-    setTimeout(() => {
-      buscadorRef.current?.focus();
-    }, 0);
   }
 
   function cambiarCantidadCarrito(varianteId, value) {
@@ -428,6 +435,26 @@ export default function Ventas() {
           cantidad: nuevaCantidad,
         };
       })
+    );
+  }
+
+  function ajustarCantidadCarrito(varianteId, diferencia) {
+    setCarrito((prev) =>
+      prev.map((item) => {
+        if (item.varianteId !== varianteId) return item;
+
+        const variante = variantes.find((v) => v.id === varianteId);
+        if (!variante) return item;
+
+        const cantidadActual = Number(item.cantidad || 1);
+        return {
+          ...item,
+          cantidad: Math.min(
+            variante.stock,
+            Math.max(1, cantidadActual + diferencia),
+          ),
+        };
+      }),
     );
   }
 
@@ -748,8 +775,8 @@ export default function Ventas() {
     </div>
   </div>
 
-  <div style={styles.resultadoLinea2}>
-    <div style={styles.resultadoEscalas}>
+  <div className="venta-resultado-linea2" style={styles.resultadoLinea2}>
+    <div className="venta-resultado-escalas" style={styles.resultadoEscalas}>
       {variante.precios?.map((p) => (
         <span key={p.id} style={styles.escalaInline}>
           {p.cantidadMinima}+ ${p.precio}
@@ -757,16 +784,37 @@ export default function Ventas() {
       ))}
     </div>
 
-    <input
-      type="number"
-      min="1"
-      style={styles.inputCantidadBusqueda}
-      value={cantidadesBusqueda[variante.id] ?? 1}
-      disabled={confirmandoVenta}
-      onChange={(e) =>
-        handleCantidadBusquedaChange(variante.id, e.target.value)
-      }
-    />
+    <div style={styles.selectorCantidad}>
+      <button
+        type="button"
+        style={styles.btnCantidad}
+        onClick={() => ajustarCantidadBusqueda(variante, -1)}
+        disabled={confirmandoVenta}
+        aria-label="Restar cantidad"
+      >
+        −
+      </button>
+      <input
+        type="number"
+        min="1"
+        max={variante.stock}
+        style={styles.inputCantidadBusqueda}
+        value={cantidadesBusqueda[variante.id] ?? 1}
+        disabled={confirmandoVenta}
+        onChange={(e) =>
+          handleCantidadBusquedaChange(variante.id, e.target.value)
+        }
+      />
+      <button
+        type="button"
+        style={styles.btnCantidad}
+        onClick={() => ajustarCantidadBusqueda(variante, 1)}
+        disabled={confirmandoVenta}
+        aria-label="Sumar cantidad"
+      >
+        +
+      </button>
+    </div>
 
     <div style={styles.resultadoPrecioAplicado}>
       {aplicadoPreview.cantidadMinima
@@ -831,7 +879,7 @@ export default function Ventas() {
                 </button>
               </div>
 
-              <div style={styles.carritoLinea2}>
+              <div className="venta-carrito-linea2" style={styles.carritoLinea2}>
                 <div style={styles.carritoEscala}>
                   {aplicado.cantidadMinima ? `${aplicado.cantidadMinima}+` : "-"}
                 </div>
@@ -859,17 +907,38 @@ export default function Ventas() {
                   >%</button>
                 </div>
 
-                <input
-                  type="number"
-                  min="1"
-                  style={styles.carritoCantidad}
-                  value={item.cantidad}
-                  disabled={confirmandoVenta}
-                  onChange={(e) =>
-                    cambiarCantidadCarrito(item.varianteId, e.target.value)
-                  }
-                  onBlur={normalizarCantidadesCarrito}
-                />
+                <div style={styles.selectorCantidad}>
+                  <button
+                    type="button"
+                    style={styles.btnCantidad}
+                    onClick={() => ajustarCantidadCarrito(item.varianteId, -1)}
+                    disabled={confirmandoVenta}
+                    aria-label="Restar cantidad"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max={variante?.stock}
+                    style={styles.carritoCantidad}
+                    value={item.cantidad}
+                    disabled={confirmandoVenta}
+                    onChange={(e) =>
+                      cambiarCantidadCarrito(item.varianteId, e.target.value)
+                    }
+                    onBlur={normalizarCantidadesCarrito}
+                  />
+                  <button
+                    type="button"
+                    style={styles.btnCantidad}
+                    onClick={() => ajustarCantidadCarrito(item.varianteId, 1)}
+                    disabled={confirmandoVenta}
+                    aria-label="Sumar cantidad"
+                  >
+                    +
+                  </button>
+                </div>
 
                 <div style={styles.carritoSubtotal}>${subtotalItem}</div>
               </div>
@@ -1124,7 +1193,7 @@ carritoNombreCompleto: {
 
 carritoLinea2: {
   display: "grid",
-  gridTemplateColumns: "0.8fr 1fr 80px 1fr",
+  gridTemplateColumns: "0.8fr 1fr auto 1fr",
   gap: 8,
   alignItems: "center",
   fontSize: 14,
@@ -1142,12 +1211,32 @@ carritoPrecio: {
 },
 
 carritoCantidad: {
-  width: "100%",
+  width: 52,
   padding: 6,
   borderRadius: 8,
   border: "1px solid var(--border-strong)",
   textAlign: "center",
   boxSizing: "border-box",
+},
+
+selectorCantidad: {
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+},
+
+btnCantidad: {
+  width: 28,
+  height: 30,
+  padding: 0,
+  border: "1px solid var(--border-strong)",
+  borderRadius: 8,
+  background: "var(--surface)",
+  color: "var(--text)",
+  fontSize: 18,
+  fontWeight: 700,
+  cursor: "pointer",
+  flexShrink: 0,
 },
 
 carritoSubtotal: {
@@ -1345,7 +1434,7 @@ resultadoStock: {
 
 resultadoLinea2: {
   display: "grid",
-  gridTemplateColumns: "1fr 70px auto auto",
+  gridTemplateColumns: "1fr auto auto auto",
   gap: 8,
   alignItems: "center",
 },
@@ -1363,7 +1452,7 @@ escalaInline: {
 },
 
 inputCantidadBusqueda: {
-  width: "100%",
+  width: 52,
   padding: 6,
   borderRadius: 8,
   border: "1px solid var(--border-strong)",
