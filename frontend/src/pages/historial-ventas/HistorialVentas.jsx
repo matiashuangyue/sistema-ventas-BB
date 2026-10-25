@@ -232,12 +232,16 @@ export default function HistorialVentas() {
   function descargarPDF(venta) {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const margen = 12;
     const gap = 4;
     const anchoNegocio = 60;
     const anchoCliente = pageWidth - margen * 2 - anchoNegocio - gap;
     const fecha = formatearFecha(venta.fecha);
     const cliente = venta.cliente || null;
+
+    doc.setDrawColor(180);
+    doc.line(pageWidth / 2, 24, pageWidth / 2, pageHeight - 12);
 
     const dibujarBloqueVenta = ({ x, y, width, titulo, compacto = false }) => {
       const padding = 3;
@@ -255,6 +259,16 @@ export default function HistorialVentas() {
       doc.setFont("helvetica", "bold");
       doc.setTextColor(37, 99, 235);
       doc.text(titulo, x + padding, y + 8);
+
+      if (!compacto) {
+        doc.setFontSize(7);
+        doc.setTextColor(90, 90, 90);
+        doc.text("B&B Distribuidora", x + padding, y + 15);
+      } else {
+        doc.setFontSize(6.5);
+        doc.setTextColor(90, 90, 90);
+        doc.text("B&B Distribuidora", x + padding, y + 15);
+      }
 
       doc.setTextColor(0);
       doc.setFontSize(bodySize);
@@ -333,11 +347,16 @@ export default function HistorialVentas() {
     doc.setTextColor(37, 99, 235);
     doc.text("B&B Distribuidora", margen, 15);
 
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(0);
     doc.text(`Fecha: ${fecha}`, pageWidth - margen, 15, { align: "right" });
     doc.text(`Venta: #${venta.id}`, pageWidth - margen, 22, { align: "right" });
+
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text("Copia cliente", margen, 26);
+    doc.text("Copia negocio", pageWidth - margen - 28, 26, { align: "right" });
 
     dibujarBloqueVenta({
       x: margen,
