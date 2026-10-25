@@ -263,21 +263,21 @@ export default function HistorialVentas() {
       `CUIT/CUIL: ${cliente.cuit || "-"} | Tel.: ${cliente.telefono || "-"}`,
       `Dirección: ${[cliente.direccion, cliente.localidad].filter(Boolean).join(" - ") || "-"}`,
     ];
-    copies.forEach((c) => {
+    copies.slice(0, 1).forEach((c) => {
       font(c.size);
       c.lines = info.flatMap((line) => doc.splitTextToSize(line, c.w - 8));
     });
-    const tableY = 41 + Math.max(...copies.map((c) => c.lines.length)) * 3.5;
+    const tableY = 41 + copies[0].lines.length * 3.5;
     const bodyY = tableY + 7;
     if (bodyY > footerY - 15) {
       alert("Los datos del cliente son demasiado largos para este formato. Revisá el nombre y la dirección.");
       return;
     }
-    // Medir ambas copias antes de paginar mantiene los mismos productos
-    // en cada mitad. Una descripción extensa puede continuar en otra hoja.
+    // Paginar el detalle del cliente. El talón de recepción se imprime
+    // una sola vez, en la última hoja, con el importe total de la venta.
     const rows = detalles.map((item) => {
       const description = [item.variante?.producto?.nombre || "Producto", item.variante?.nombre].filter(Boolean).join(" / ");
-      const lines = copies.map((c) => {
+      const lines = copies.slice(0, 1).map((c) => {
         font(c.size);
         return doc.splitTextToSize(description, c.columns[1] - 4);
       });
@@ -313,6 +313,44 @@ export default function HistorialVentas() {
       doc.setLineDashPattern([], 0);
       copies.forEach((c, copyIndex) => {
         const { x, w, columns } = c;
+        if (copyIndex === 1) {
+          // Un único talón por venta evita duplicar comprobantes de recepción.
+          if (pageIndex !== pages.length - 1) return;
+          doc.setDrawColor(80);
+          doc.rect(x, 8, w, height - 18);
+          font(12, true);
+          doc.text("B&B Distribuidora", x + 5, 18);
+          font(9, true);
+          doc.text("COMPROBANTE DE RECEPCIÓN", x + 5, 27);
+          doc.line(x, 32, x + w, 32);
+          font(8, true);
+          doc.text("CLIENTE", x + 5, 41);
+          // Conservar el nombre completo, ajustando el tamaño si es muy largo.
+          let nameSize = 12;
+          let nameLines;
+          do {
+            font(nameSize, true);
+            nameLines = doc.splitTextToSize(String(cliente.nombre || "Consumidor Final"), w - 10);
+            if (nameLines.length * nameSize * 0.45 <= 50) break;
+            nameSize -= 0.5;
+          } while (nameSize > 1);
+          const lineHeight = nameSize * 0.45;
+          nameLines.forEach((line, index) => doc.text(line, x + 5, 49 + index * lineHeight));
+          const infoY = 49 + nameLines.length * lineHeight + 8;
+          fit(`Venta #${venta.id}`, x + 5, infoY, w - 10, 10, "left", true);
+          fit(`Fecha: ${formatearFecha(venta.fecha)}`, x + 5, infoY + 8, w - 10, 9);
+          doc.line(x + 5, infoY + 14, x + w - 5, infoY + 14);
+          font(9, true);
+          doc.text("IMPORTE TOTAL", x + 5, infoY + 23);
+          fit(money(venta.total), x + 5, infoY + 34, w - 10, 18, "left", true);
+          font(9);
+          doc.text("Recibí la mercadería", x + 5, height - 51);
+          doc.line(x + 5, height - 32, x + w - 5, height - 32);
+          font(8);
+          doc.text("Firma", x + 5, height - 27);
+          return;
+        }
+
         doc.setDrawColor(80);
         doc.rect(x, 8, w, height - 18);
         font(copyIndex === 0 ? 17 : 12, true);
@@ -377,7 +415,7 @@ export default function HistorialVentas() {
           fit(`Pago: ${formatearFormaPago(venta.formaPago)} / ${formatearEstadoPago(venta.estadoPago)}`, x + 4, footerY + 32, w - 8);
           fit(`Transferencia - Alias: ${DATOS_TRANSFERENCIA.alias || "-"}`, x + 4, footerY + 38, w - 8);
           font(7);
-          doc.text(copyIndex === 1 ? "Recibí / Firma: __________________________" : "Gracias por tu compra", x + 4, footerY + 45);
+          doc.text("Gracias por tu compra", x + 4, footerY + 45);
         } else {
           font(8, true);
           doc.text("Continúa en la siguiente hoja", x + 4, footerY + 8);
