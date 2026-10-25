@@ -231,139 +231,130 @@ export default function HistorialVentas() {
 
   function descargarPDF(venta) {
     const doc = new jsPDF();
-
-    const cliente = venta.cliente;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margen = 12;
+    const gap = 4;
+    const anchoNegocio = 60;
+    const anchoCliente = pageWidth - margen * 2 - anchoNegocio - gap;
     const fecha = formatearFecha(venta.fecha);
+    const cliente = venta.cliente || null;
 
-    // --- ENCABEZADO (Negocio a la izquierda, Venta a la derecha) ---
-    doc.setFontSize(18);
-    doc.setTextColor(37, 99, 235); // Azul institucional
-    doc.setFont("helvetica", "bold");
-    doc.text("B&B Distribuidora", 14, 15);
+    const dibujarBloqueVenta = ({ x, y, width, titulo, compacto = false }) => {
+      const padding = 3;
+      const contentWidth = width - padding * 2;
+      const titleSize = compacto ? 9 : 11;
+      const bodySize = compacto ? 7 : 8.5;
+      const lineHeight = compacto ? 4.2 : 5.3;
+      const fillColor = compacto ? [247, 248, 250] : [255, 255, 255];
 
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.setFont("helvetica", "normal");
-    doc.text("Contacto: 3464528526", 14, 22);
+      doc.setFillColor(...fillColor);
+      doc.setDrawColor(compacto ? 210 : 220);
+      doc.roundedRect(x, y, width, 178, 2.5, 2.5, "FD");
 
-    doc.setTextColor(0);
-    doc.text(`Fecha: ${fecha}`, 196, 15, { align: "right" });
-    doc.text(`Venta: #${venta.id}`, 196, 22, { align: "right" });
+      doc.setFontSize(titleSize);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(37, 99, 235);
+      doc.text(titulo, x + padding, y + 8);
 
-    // --- SECCIÓN: DATOS DEL CLIENTE ---
-    doc.setDrawColor(230); // Línea sutil
-    doc.line(14, 28, 196, 28);
+      doc.setTextColor(0);
+      doc.setFontSize(bodySize);
+      doc.setFont("helvetica", "normal");
+
+      const nombreCliente = cliente?.nombre || "Consumidor Final";
+      const direccionCliente = cliente
+        ? `${cliente.direccion || "-"} (${cliente.localidad || "-"})`
+        : "-";
+
+      const datosCliente = [
+        `Cliente: ${nombreCliente}`,
+        `CUIT/CUIL: ${cliente?.cuit || "-"}`,
+        `Teléfono: ${cliente?.telefono || "-"}`,
+        `Dirección: ${direccionCliente}`,
+      ];
+
+      let currentY = y + 16;
+
+      datosCliente.forEach((dato) => {
+        const lines = doc.splitTextToSize(dato, contentWidth);
+        doc.text(lines, x + padding, currentY);
+        currentY += lines.length * lineHeight;
+      });
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Productos", x + padding, currentY + 4);
+      currentY += 9;
+      doc.setFont("helvetica", "normal");
+
+      venta.detalles.forEach((item) => {
+        const nombreProducto = `${item.variante?.producto?.nombre || "Producto"}${
+          item.variante?.nombre ? ` / ${item.variante.nombre}` : ""
+        }`;
+        const linea = `${nombreProducto} x${item.cantidad} - $${item.subtotal}`;
+        const lines = doc.splitTextToSize(linea, contentWidth);
+        doc.text(lines, x + padding, currentY);
+        currentY += lines.length * lineHeight + 0.2;
+      });
+
+      const totalY = y + 155;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(compacto ? 8 : 9);
+      doc.text(`Total: $${venta.total}`, x + padding, totalY);
+
+      if (compacto) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.5);
+        doc.text(`Pago: ${formatearFormaPago(venta.formaPago)}`, x + padding, totalY + 6);
+        doc.text(`Estado: ${formatearEstadoPago(venta.estadoPago)}`, x + padding, totalY + 11);
+        if (DATOS_TRANSFERENCIA.alias.trim()) {
+          doc.text(`Alias: ${DATOS_TRANSFERENCIA.alias}`, x + padding, totalY + 16);
+        }
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(bodySize);
+        doc.text(`Pago: ${formatearFormaPago(venta.formaPago)}`, x + padding, totalY + 6);
+        doc.text(`Estado: ${formatearEstadoPago(venta.estadoPago)}`, x + padding, totalY + 11);
+        doc.text(`Pagado: $${venta.montoPagado || 0}`, x + padding, totalY + 16);
+        doc.text(`Saldo: $${venta.saldoPendiente || 0}`, x + padding, totalY + 21);
+
+        if (DATOS_TRANSFERENCIA.alias.trim()) {
+          const aliasY = totalY + 28;
+          doc.setDrawColor(220);
+          doc.roundedRect(x + padding, aliasY - 6, width - padding * 2, 15, 2, 2);
+          doc.setFont("helvetica", "bold");
+          doc.text("Transferencia", x + padding + 2, aliasY + 0.5);
+          doc.setFont("helvetica", "normal");
+          doc.text(`Alias: ${DATOS_TRANSFERENCIA.alias}`, x + padding + 2, aliasY + 7);
+        }
+      }
+    };
 
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
-    doc.text("DATOS DEL CLIENTE", 14, 38);
+    doc.setTextColor(37, 99, 235);
+    doc.text("B&B Distribuidora", margen, 15);
 
-    // Cuadro de datos del cliente
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
+    doc.setTextColor(0);
+    doc.text(`Fecha: ${fecha}`, pageWidth - margen, 15, { align: "right" });
+    doc.text(`Venta: #${venta.id}`, pageWidth - margen, 22, { align: "right" });
 
-    let currentY = 46;
-
-    if (cliente) {
-      // Usamos un formato de etiqueta: valor para mayor orden
-      const datos = [
-        { label: "Nombre:", value: cliente.nombre || "Sin nombre" },
-        { label: "CUIT/CUIL:", value: cliente.cuit || "-" },
-        { label: "Teléfono:", value: cliente.telefono || "-" },
-        {
-          label: "Dirección:",
-          value: `${cliente.direccion || "-"} (${cliente.localidad || "-"})`,
-        },
-      ];
-
-      datos.forEach((dato) => {
-        doc.setFont("helvetica", "bold");
-        doc.text(dato.label, 14, currentY);
-        doc.setFont("helvetica", "normal");
-        doc.text(dato.value, 40, currentY); // Desplazado a la derecha del label
-        currentY += 6;
-      });
-    } else {
-      doc.text("Consumidor Final", 14, currentY);
-      currentY += 6;
-    }
-
-    // --- TABLA DE PRODUCTOS ---
-    // El startY ahora es dinámico según cuántos datos de cliente se escribieron
-    autoTable(doc, {
-      startY: currentY + 5,
-      head: [["Producto", "Cantidad", "P. Unitario", "Subtotal"]],
-      body: venta.detalles.map((item) => [
-        `${item.variante?.producto?.nombre || ""} - ${item.variante?.nombre || ""}`,
-        item.cantidad,
-        `$${item.precioUnitario}`,
-        `$${item.subtotal}`,
-      ]),
-      headStyles: { fillColor: [37, 99, 235], halign: "center" },
-      columnStyles: {
-        1: { halign: "center" },
-        2: { halign: "right" },
-        3: { halign: "right" },
-      },
-      styles: { fontSize: 9 },
+    dibujarBloqueVenta({
+      x: margen,
+      y: 28,
+      width: anchoCliente,
+      titulo: "COPIA CLIENTE",
+      compacto: false,
     });
 
-    // --- TOTALES ---
-    const finalY = doc.lastAutoTable?.finalY || 100;
-    const margenDerecho = 196;
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-
-    // Subtotal
-    doc.text("Subtotal:", 140, finalY + 10);
-    doc.text(`$${venta.subtotal}`, margenDerecho, finalY + 10, {
-      align: "right",
+    dibujarBloqueVenta({
+      x: margen + anchoCliente + gap,
+      y: 28,
+      width: anchoNegocio,
+      titulo: "MI COPIA",
+      compacto: true,
     });
 
-    // Descuento (Solo si existe)
-    if (venta.descuento > 0) {
-      doc.text("Descuento:", 140, finalY + 16);
-      doc.setTextColor(200, 0, 0); // Rojo para el descuento
-      doc.text(`- $${venta.descuento}`, margenDerecho, finalY + 16, {
-        align: "right",
-      });
-      doc.setTextColor(0);
-    }
-
-    // Línea de Total
-    doc.setDrawColor(37, 99, 235);
-    doc.setLineWidth(0.5);
-    doc.line(140, finalY + 20, 196, finalY + 20);
-
-    // Total Final
-    doc.setFontSize(13);
-    doc.setFont("helvetica", "bold");
-    doc.text("TOTAL:", 140, finalY + 28);
-    doc.text(`$${venta.total}`, margenDerecho, finalY + 28, { align: "right" });
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Forma de pago: ${formatearFormaPago(venta.formaPago)}`, 14, finalY + 38);
-    doc.text(`Estado: ${formatearEstadoPago(venta.estadoPago)}`, 14, finalY + 44);
-    doc.text(`Pagado: $${venta.montoPagado || 0}`, 140, finalY + 38);
-    doc.text(`Saldo: $${venta.saldoPendiente || 0}`, margenDerecho, finalY + 38, {
-      align: "right",
-    });
-
-    if (DATOS_TRANSFERENCIA.alias.trim()) {
-      const bloqueTransferenciaY = finalY + 54;
-
-      doc.setDrawColor(220);
-      doc.roundedRect(14, bloqueTransferenciaY - 8, 182, 18, 2, 2);
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text("Datos para transferencia", 18, bloqueTransferenciaY - 1);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Alias: ${DATOS_TRANSFERENCIA.alias}`, 18, bloqueTransferenciaY + 6);
-    }
-
-    // Guardar el PDF
     doc.save(`venta-${venta.id}.pdf`);
   }
 
