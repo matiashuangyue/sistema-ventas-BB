@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+
 import LoadingContent from "../../components/LoadingContent";
 import { API_URL as API } from "../../config/api";
 
@@ -230,139 +230,164 @@ export default function HistorialVentas() {
   }
 
   function descargarPDF(venta) {
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 10;
-    const gap = 5;
-    const leftWidth = 140;
-    const rightWidth = pageWidth - leftWidth - margin * 2 - gap;
-    const leftX = margin;
-    const rightX = leftX + leftWidth + gap;
-    const cliente = venta.cliente || null;
-    const fecha = formatearFecha(venta.fecha);
-
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(210, 210, 210);
-    doc.roundedRect(leftX, 12, leftWidth, pageHeight - 24, 2.5, 2.5, "S");
-    doc.roundedRect(rightX, 12, rightWidth, pageHeight - 24, 2.5, 2.5, "S");
-
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(37, 99, 235);
-    doc.text("B&B Distribuidora", margin, 8);
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(60);
-    doc.text(`Fecha: ${fecha}`, pageWidth - margin, 8, { align: "right" });
-    doc.text(`Venta #${venta.id}`, pageWidth - margin, 14, { align: "right" });
-
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(35, 35, 35);
-    doc.setFontSize(11);
-    doc.text("COPIA CLIENTE", leftX + 5, 20);
-    doc.text("MI COPIA", rightX + 5, 20);
-
-    const infoCliente = [
-      `Cliente: ${cliente?.nombre || "Consumidor Final"}`,
-      `CUIT/CUIL: ${cliente?.cuit || "-"}`,
-      `Teléfono: ${cliente?.telefono || "-"}`,
-      `Dirección: ${cliente ? `${cliente.direccion || "-"} (${cliente.localidad || "-"})` : "-"}`,
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const height = doc.internal.pageSize.getHeight();
+    const width = doc.internal.pageSize.getWidth();
+    const margin = 8, gap = 6;
+    const leftWidth = (width - margin * 2 - gap) * 0.65;
+    const rightWidth = width - margin * 2 - gap - leftWidth;
+    const footerY = height - 58;
+    const cliente = venta.cliente || {};
+    const detalles = Array.isArray(venta.detalles) ? venta.detalles : [];
+    const money = (v) => `$ ${Number(v ?? 0).toLocaleString("es-AR", {
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    })}`;
+    const copies = [
+      { x: margin, w: leftWidth, title: "COPIA CLIENTE", size: 8, columns: [14, leftWidth - 66, 26, 26] },
+      { x: margin + leftWidth + gap, w: rightWidth, title: "TALÓN DISTRIBUIDORA", size: 7, columns: [11, rightWidth - 55, 22, 22] },
     ];
-
-    let y = 28;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    infoCliente.forEach((linea) => {
-      const parsed = doc.splitTextToSize(linea, leftWidth - 12);
-      doc.text(parsed, leftX + 6, y);
-      y += parsed.length * 5;
-    });
-
-    y += 3;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("Productos", leftX + 5, y);
-    y += 5;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-
-    venta.detalles.forEach((item, index) => {
-      const nombre = `${index + 1}. ${item.variante?.producto?.nombre || "Producto"}`;
-      const variante = item.variante?.nombre ? ` / ${item.variante.nombre}` : "";
-      const linea = `${nombre}${variante} x${item.cantidad}`;
-      const wrapped = doc.splitTextToSize(linea, leftWidth - 18);
-      doc.text(wrapped, leftX + 5, y);
-      y += wrapped.length * 4.3;
-
-      const subtotalText = `$${item.subtotal}`;
-      doc.text(subtotalText, leftX + leftWidth - 20, y - (wrapped.length * 4.3) + 3, { align: "right" });
-    });
-
-    const totalY = pageHeight - 62;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
-    doc.text("TOTAL", leftX + 5, totalY);
-    doc.text(`$${venta.total}`, leftX + leftWidth - 5, totalY, { align: "right" });
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.text(`Forma de pago: ${formatearFormaPago(venta.formaPago)}`, leftX + 5, totalY + 8);
-    doc.text(`Estado: ${formatearEstadoPago(venta.estadoPago)}`, leftX + 5, totalY + 14);
-    doc.text(`Pagado: $${venta.montoPagado || 0}`, leftX + 5, totalY + 20);
-    doc.text(`Saldo: $${venta.saldoPendiente || 0}`, leftX + 5, totalY + 26);
-
-    doc.setDrawColor(220, 220, 220);
-    doc.roundedRect(leftX + 5, totalY + 34, leftWidth - 10, 18, 2, 2, "S");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.text("Transferencia", leftX + 10, totalY + 43);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Alias: ${DATOS_TRANSFERENCIA.alias}`, leftX + 10, totalY + 50);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.text("NEGOCIO", rightX + 5, 24);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.2);
-    doc.text("B&B Distribuidora", rightX + 6, 32);
-    doc.text("Contacto: 3464528526", rightX + 6, 38);
-
-    const negocioY = 52;
-    doc.setFont("helvetica", "bold");
-    doc.text("Venta", rightX + 6, negocioY);
-    doc.setFont("helvetica", "normal");
-    doc.text(`#${venta.id}`, rightX + 6, negocioY + 5);
-    doc.text(fecha, rightX + 6, negocioY + 10);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Cliente", rightX + 6, negocioY + 20);
-    doc.setFont("helvetica", "normal");
-    const clienteCorto = (cliente?.nombre || "Consumidor Final").slice(0, 18);
-    doc.text(clienteCorto, rightX + 6, negocioY + 26);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Total", rightX + 6, negocioY + 42);
-    doc.setFont("helvetica", "normal");
-    doc.text(`$${venta.total}`, rightX + 6, negocioY + 48);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Pago", rightX + 6, negocioY + 58);
-    doc.setFont("helvetica", "normal");
-    doc.text(formatearFormaPago(venta.formaPago), rightX + 6, negocioY + 64);
-
-    if (DATOS_TRANSFERENCIA.alias.trim()) {
-      doc.setDrawColor(220, 220, 220);
-      doc.roundedRect(rightX + 5, negocioY + 74, rightWidth - 10, 18, 1.5, 1.5, "S");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      doc.text("Alias", rightX + 8, negocioY + 82);
-      doc.setFont("helvetica", "normal");
-      doc.text(DATOS_TRANSFERENCIA.alias, rightX + 8, negocioY + 88);
+    function font(size = 8, bold = false) {
+      doc.setFont("helvetica", bold ? "bold" : "normal");
+      doc.setFontSize(size);
+      doc.setTextColor(25);
     }
-
+    function fit(text, x, y, maxWidth, size = 8, align = "left", bold = false) {
+      font(size, bold);
+      const value = String(text);
+      const measured = doc.getTextWidth(value);
+      if (measured > maxWidth) doc.setFontSize(size * maxWidth / measured);
+      doc.text(value, x, y, { align });
+    }
+    const info = [
+      `Cliente: ${cliente.nombre || "Consumidor Final"}`,
+      `CUIT/CUIL: ${cliente.cuit || "-"} | Tel.: ${cliente.telefono || "-"}`,
+      `Dirección: ${[cliente.direccion, cliente.localidad].filter(Boolean).join(" - ") || "-"}`,
+    ];
+    copies.forEach((c) => {
+      font(c.size);
+      c.lines = info.flatMap((line) => doc.splitTextToSize(line, c.w - 8));
+    });
+    const tableY = 41 + Math.max(...copies.map((c) => c.lines.length)) * 3.5;
+    const bodyY = tableY + 7;
+    if (bodyY > footerY - 15) {
+      alert("Los datos del cliente son demasiado largos para este formato. Revisá el nombre y la dirección.");
+      return;
+    }
+    // Medir ambas copias antes de paginar mantiene los mismos productos
+    // en cada mitad. Una descripción extensa puede continuar en otra hoja.
+    const rows = detalles.map((item) => {
+      const description = [item.variante?.producto?.nombre || "Producto", item.variante?.nombre].filter(Boolean).join(" / ");
+      const lines = copies.map((c) => {
+        font(c.size);
+        return doc.splitTextToSize(description, c.columns[1] - 4);
+      });
+      return { item, lines, count: Math.max(...lines.map((list) => list.length)) };
+    });
+    const pages = [[]];
+    const capacity = footerY - bodyY;
+    let used = 0;
+    for (const row of rows) {
+      let offset = 0;
+      while (offset < row.count) {
+        let available = Math.floor((capacity - used - 4) / 3.5);
+        if (available < 1) {
+          pages.push([]);
+          used = 0;
+          available = Math.floor((capacity - 4) / 3.5);
+        }
+        const take = Math.min(row.count - offset, available);
+        const rowHeight = take * 3.5 + 4;
+        pages[pages.length - 1].push({ ...row, offset, take, height: rowHeight });
+        offset += take;
+        used += rowHeight;
+      }
+    }
+    const subtotal = venta.subtotal ?? detalles.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
+    pages.forEach((pageRows, pageIndex) => {
+      if (pageIndex) doc.addPage();
+      doc.setDrawColor(110);
+      doc.setLineWidth(0.2);
+      doc.setLineDashPattern([1.5, 1.5], 0);
+      const cutX = margin + leftWidth + gap / 2;
+      doc.line(cutX, 6, cutX, height - 6);
+      doc.setLineDashPattern([], 0);
+      copies.forEach((c, copyIndex) => {
+        const { x, w, columns } = c;
+        doc.setDrawColor(80);
+        doc.rect(x, 8, w, height - 18);
+        font(copyIndex === 0 ? 17 : 12, true);
+        doc.text("B&B Distribuidora", x + 4, 16);
+        font(8);
+        doc.text("Contacto: 3464528526", x + 4, 21);
+        font(8, true);
+        doc.text(c.title, x + 4, 27);
+        doc.line(x, 30, x + w, 30);
+        fit(`Venta #${venta.id} | ${formatearFecha(venta.fecha)}`, x + 4, 35, w - 8);
+        font(c.size);
+        c.lines.forEach((line, i) => doc.text(line, x + 4, 41 + i * 3.5));
+        doc.setFillColor(238);
+        doc.rect(x, tableY, w, 7, "FD");
+        let cellX = x;
+        ["Cant.", "Producto / variante", "P. unitario", "Importe"].forEach((label, i) => {
+          fit(label, cellX + 2, tableY + 4.6, columns[i] - 4, c.size);
+          cellX += columns[i];
+        });
+        let y = bodyY;
+        for (const row of pageRows) {
+          cellX = x;
+          const cells = [
+            row.offset === 0 ? String(row.item.cantidad ?? "-") : "",
+            row.lines[copyIndex].slice(row.offset, row.offset + row.take),
+            row.offset === 0 ? money(row.item.precioUnitario) : "",
+            row.offset === 0 ? money(row.item.subtotal) : "",
+          ];
+          cells.forEach((cell, i) => {
+            if (i === 1) {
+              font(c.size);
+              cell.forEach((line, j) => doc.text(line, cellX + 2, y + 4 + j * 3.5));
+            } else fit(cell, cellX + columns[i] - 2, y + 4, columns[i] - 4, c.size, "right");
+            cellX += columns[i];
+          });
+          y += row.height;
+          doc.setDrawColor(210);
+          doc.line(x, y, x + w, y);
+        }
+        if (!detalles.length) {
+          font(8);
+          doc.text("Sin productos registrados", x + 4, bodyY + 6);
+        }
+        doc.setDrawColor(120);
+        let dividerX = x;
+        columns.slice(0, -1).forEach((column) => {
+          dividerX += column;
+          doc.line(dividerX, tableY, dividerX, footerY);
+        });
+        doc.line(x, footerY, x + w, footerY);
+        if (pageIndex === pages.length - 1) {
+          [
+            ["Subtotal", money(subtotal)], ["Descuento", money(venta.descuento)],
+            ["TOTAL", money(venta.total)], ["Pagado", money(venta.montoPagado)],
+            ["Saldo pendiente", money(venta.saldoPendiente)],
+          ].forEach(([label, value], i) => {
+            const yy = footerY + 5 + i * 5;
+            font(i === 2 ? 10 : 8, i === 2);
+            doc.text(label, x + 4, yy);
+            fit(value, x + w - 4, yy, w * 0.5, i === 2 ? 10 : 8, "right", i === 2);
+          });
+          fit(`Pago: ${formatearFormaPago(venta.formaPago)} / ${formatearEstadoPago(venta.estadoPago)}`, x + 4, footerY + 32, w - 8);
+          fit(`Transferencia - Alias: ${DATOS_TRANSFERENCIA.alias || "-"}`, x + 4, footerY + 38, w - 8);
+          font(7);
+          doc.text(copyIndex === 1 ? "Recibí / Firma: __________________________" : "Gracias por tu compra", x + 4, footerY + 45);
+        } else {
+          font(8, true);
+          doc.text("Continúa en la siguiente hoja", x + 4, footerY + 8);
+          font(7);
+          doc.text("Totales y pago al final del comprobante.", x + 4, footerY + 14);
+        }
+        font(7);
+        doc.text(`Venta #${venta.id} - Hoja ${pageIndex + 1} de ${pages.length}`, x + w / 2, height - 5, { align: "center" });
+      });
+    });
     doc.save(`venta-${venta.id}.pdf`);
   }
 
@@ -1094,3 +1119,4 @@ const styles = {
     flexWrap: "wrap",
   },
 };
+
