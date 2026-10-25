@@ -230,149 +230,138 @@ export default function HistorialVentas() {
   }
 
   function descargarPDF(venta) {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margen = 12;
-    const gap = 4;
-    const anchoNegocio = 60;
-    const anchoCliente = pageWidth - margen * 2 - anchoNegocio - gap;
-    const fecha = formatearFecha(venta.fecha);
+    const margin = 10;
+    const gap = 5;
+    const leftWidth = 140;
+    const rightWidth = pageWidth - leftWidth - margin * 2 - gap;
+    const leftX = margin;
+    const rightX = leftX + leftWidth + gap;
     const cliente = venta.cliente || null;
+    const fecha = formatearFecha(venta.fecha);
 
-    doc.setDrawColor(180);
-    doc.line(pageWidth / 2, 24, pageWidth / 2, pageHeight - 12);
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(210, 210, 210);
+    doc.roundedRect(leftX, 12, leftWidth, pageHeight - 24, 2.5, 2.5, "S");
+    doc.roundedRect(rightX, 12, rightWidth, pageHeight - 24, 2.5, 2.5, "S");
 
-    const dibujarBloqueVenta = ({ x, y, width, titulo, compacto = false }) => {
-      const padding = 3;
-      const contentWidth = width - padding * 2;
-      const titleSize = compacto ? 9 : 11;
-      const bodySize = compacto ? 7 : 8.5;
-      const lineHeight = compacto ? 4.2 : 5.3;
-      const fillColor = compacto ? [247, 248, 250] : [255, 255, 255];
-
-      doc.setFillColor(...fillColor);
-      doc.setDrawColor(compacto ? 210 : 220);
-      doc.roundedRect(x, y, width, 178, 2.5, 2.5, "FD");
-
-      doc.setFontSize(titleSize);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(37, 99, 235);
-      doc.text(titulo, x + padding, y + 8);
-
-      if (!compacto) {
-        doc.setFontSize(7);
-        doc.setTextColor(90, 90, 90);
-        doc.text("B&B Distribuidora", x + padding, y + 15);
-      } else {
-        doc.setFontSize(6.5);
-        doc.setTextColor(90, 90, 90);
-        doc.text("B&B Distribuidora", x + padding, y + 15);
-      }
-
-      doc.setTextColor(0);
-      doc.setFontSize(bodySize);
-      doc.setFont("helvetica", "normal");
-
-      const nombreCliente = cliente?.nombre || "Consumidor Final";
-      const direccionCliente = cliente
-        ? `${cliente.direccion || "-"} (${cliente.localidad || "-"})`
-        : "-";
-
-      const datosCliente = [
-        `Cliente: ${nombreCliente}`,
-        `CUIT/CUIL: ${cliente?.cuit || "-"}`,
-        `Teléfono: ${cliente?.telefono || "-"}`,
-        `Dirección: ${direccionCliente}`,
-      ];
-
-      let currentY = y + 16;
-
-      datosCliente.forEach((dato) => {
-        const lines = doc.splitTextToSize(dato, contentWidth);
-        doc.text(lines, x + padding, currentY);
-        currentY += lines.length * lineHeight;
-      });
-
-      doc.setFont("helvetica", "bold");
-      doc.text("Productos", x + padding, currentY + 4);
-      currentY += 9;
-      doc.setFont("helvetica", "normal");
-
-      venta.detalles.forEach((item) => {
-        const nombreProducto = `${item.variante?.producto?.nombre || "Producto"}${
-          item.variante?.nombre ? ` / ${item.variante.nombre}` : ""
-        }`;
-        const linea = `${nombreProducto} x${item.cantidad} - $${item.subtotal}`;
-        const lines = doc.splitTextToSize(linea, contentWidth);
-        doc.text(lines, x + padding, currentY);
-        currentY += lines.length * lineHeight + 0.2;
-      });
-
-      const totalY = y + 155;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(compacto ? 8 : 9);
-      doc.text(`Total: $${venta.total}`, x + padding, totalY);
-
-      if (compacto) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.5);
-        doc.text(`Pago: ${formatearFormaPago(venta.formaPago)}`, x + padding, totalY + 6);
-        doc.text(`Estado: ${formatearEstadoPago(venta.estadoPago)}`, x + padding, totalY + 11);
-        if (DATOS_TRANSFERENCIA.alias.trim()) {
-          doc.text(`Alias: ${DATOS_TRANSFERENCIA.alias}`, x + padding, totalY + 16);
-        }
-      } else {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(bodySize);
-        doc.text(`Pago: ${formatearFormaPago(venta.formaPago)}`, x + padding, totalY + 6);
-        doc.text(`Estado: ${formatearEstadoPago(venta.estadoPago)}`, x + padding, totalY + 11);
-        doc.text(`Pagado: $${venta.montoPagado || 0}`, x + padding, totalY + 16);
-        doc.text(`Saldo: $${venta.saldoPendiente || 0}`, x + padding, totalY + 21);
-
-        if (DATOS_TRANSFERENCIA.alias.trim()) {
-          const aliasY = totalY + 28;
-          doc.setDrawColor(220);
-          doc.roundedRect(x + padding, aliasY - 6, width - padding * 2, 15, 2, 2);
-          doc.setFont("helvetica", "bold");
-          doc.text("Transferencia", x + padding + 2, aliasY + 0.5);
-          doc.setFont("helvetica", "normal");
-          doc.text(`Alias: ${DATOS_TRANSFERENCIA.alias}`, x + padding + 2, aliasY + 7);
-        }
-      }
-    };
-
-    doc.setFontSize(11);
+    doc.setFontSize(18);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(37, 99, 235);
-    doc.text("B&B Distribuidora", margen, 15);
+    doc.text("B&B Distribuidora", margin, 8);
 
-    doc.setFontSize(8.5);
+    doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(0);
-    doc.text(`Fecha: ${fecha}`, pageWidth - margen, 15, { align: "right" });
-    doc.text(`Venta: #${venta.id}`, pageWidth - margen, 22, { align: "right" });
+    doc.setTextColor(60);
+    doc.text(`Fecha: ${fecha}`, pageWidth - margin, 8, { align: "right" });
+    doc.text(`Venta #${venta.id}`, pageWidth - margin, 14, { align: "right" });
 
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(35, 35, 35);
+    doc.setFontSize(11);
+    doc.text("COPIA CLIENTE", leftX + 5, 20);
+    doc.text("MI COPIA", rightX + 5, 20);
+
+    const infoCliente = [
+      `Cliente: ${cliente?.nombre || "Consumidor Final"}`,
+      `CUIT/CUIL: ${cliente?.cuit || "-"}`,
+      `Teléfono: ${cliente?.telefono || "-"}`,
+      `Dirección: ${cliente ? `${cliente.direccion || "-"} (${cliente.localidad || "-"})` : "-"}`,
+    ];
+
+    let y = 28;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    infoCliente.forEach((linea) => {
+      const parsed = doc.splitTextToSize(linea, leftWidth - 12);
+      doc.text(parsed, leftX + 6, y);
+      y += parsed.length * 5;
+    });
+
+    y += 3;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("Productos", leftX + 5, y);
+    y += 5;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+
+    venta.detalles.forEach((item, index) => {
+      const nombre = `${index + 1}. ${item.variante?.producto?.nombre || "Producto"}`;
+      const variante = item.variante?.nombre ? ` / ${item.variante.nombre}` : "";
+      const linea = `${nombre}${variante} x${item.cantidad}`;
+      const wrapped = doc.splitTextToSize(linea, leftWidth - 18);
+      doc.text(wrapped, leftX + 5, y);
+      y += wrapped.length * 4.3;
+
+      const subtotalText = `$${item.subtotal}`;
+      doc.text(subtotalText, leftX + leftWidth - 20, y - (wrapped.length * 4.3) + 3, { align: "right" });
+    });
+
+    const totalY = pageHeight - 62;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text("TOTAL", leftX + 5, totalY);
+    doc.text(`$${venta.total}`, leftX + leftWidth - 5, totalY, { align: "right" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text(`Forma de pago: ${formatearFormaPago(venta.formaPago)}`, leftX + 5, totalY + 8);
+    doc.text(`Estado: ${formatearEstadoPago(venta.estadoPago)}`, leftX + 5, totalY + 14);
+    doc.text(`Pagado: $${venta.montoPagado || 0}`, leftX + 5, totalY + 20);
+    doc.text(`Saldo: $${venta.saldoPendiente || 0}`, leftX + 5, totalY + 26);
+
+    doc.setDrawColor(220, 220, 220);
+    doc.roundedRect(leftX + 5, totalY + 34, leftWidth - 10, 18, 2, 2, "S");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
-    doc.setTextColor(100);
-    doc.text("Copia cliente", margen, 26);
-    doc.text("Copia negocio", pageWidth - margen - 28, 26, { align: "right" });
+    doc.text("Transferencia", leftX + 10, totalY + 43);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Alias: ${DATOS_TRANSFERENCIA.alias}`, leftX + 10, totalY + 50);
 
-    dibujarBloqueVenta({
-      x: margen,
-      y: 28,
-      width: anchoCliente,
-      titulo: "COPIA CLIENTE",
-      compacto: false,
-    });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text("NEGOCIO", rightX + 5, 24);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    doc.text("B&B Distribuidora", rightX + 6, 32);
+    doc.text("Contacto: 3464528526", rightX + 6, 38);
 
-    dibujarBloqueVenta({
-      x: margen + anchoCliente + gap,
-      y: 28,
-      width: anchoNegocio,
-      titulo: "MI COPIA",
-      compacto: true,
-    });
+    const negocioY = 52;
+    doc.setFont("helvetica", "bold");
+    doc.text("Venta", rightX + 6, negocioY);
+    doc.setFont("helvetica", "normal");
+    doc.text(`#${venta.id}`, rightX + 6, negocioY + 5);
+    doc.text(fecha, rightX + 6, negocioY + 10);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Cliente", rightX + 6, negocioY + 20);
+    doc.setFont("helvetica", "normal");
+    const clienteCorto = (cliente?.nombre || "Consumidor Final").slice(0, 18);
+    doc.text(clienteCorto, rightX + 6, negocioY + 26);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Total", rightX + 6, negocioY + 42);
+    doc.setFont("helvetica", "normal");
+    doc.text(`$${venta.total}`, rightX + 6, negocioY + 48);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Pago", rightX + 6, negocioY + 58);
+    doc.setFont("helvetica", "normal");
+    doc.text(formatearFormaPago(venta.formaPago), rightX + 6, negocioY + 64);
+
+    if (DATOS_TRANSFERENCIA.alias.trim()) {
+      doc.setDrawColor(220, 220, 220);
+      doc.roundedRect(rightX + 5, negocioY + 74, rightWidth - 10, 18, 1.5, 1.5, "S");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("Alias", rightX + 8, negocioY + 82);
+      doc.setFont("helvetica", "normal");
+      doc.text(DATOS_TRANSFERENCIA.alias, rightX + 8, negocioY + 88);
+    }
 
     doc.save(`venta-${venta.id}.pdf`);
   }
