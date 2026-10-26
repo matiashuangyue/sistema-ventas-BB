@@ -234,9 +234,10 @@ export default function HistorialVentas() {
     const height = doc.internal.pageSize.getHeight();
     const width = doc.internal.pageSize.getWidth();
     const margin = 8, gap = 6;
-    const leftWidth = (width - margin * 2 - gap) * 0.65;
+    const leftWidth = (width - margin * 2 - gap) * 0.80;
     const rightWidth = width - margin * 2 - gap - leftWidth;
-    const footerY = height - 58;
+    // El pie ocupa el 10% del alto, dentro del margen inferior.
+    const footerY = height - 10 - height * 0.10;
     const cliente = venta.cliente || {};
     const detalles = Array.isArray(venta.detalles) ? venta.detalles : [];
     const money = (v) => `$ ${Number(v ?? 0).toLocaleString("es-AR", {
@@ -244,7 +245,7 @@ export default function HistorialVentas() {
     })}`;
     const copies = [
       { x: margin, w: leftWidth, title: "COPIA CLIENTE", size: 8, columns: [14, leftWidth - 66, 26, 26] },
-      { x: margin + leftWidth + gap, w: rightWidth, title: "TALÓN DISTRIBUIDORA", size: 7, columns: [11, rightWidth - 55, 22, 22] },
+      { x: margin + leftWidth + gap, w: rightWidth, title: "TALÓN DISTRIBUIDORA", size: 7 },
     ];
     function font(size = 8, bold = false) {
       doc.setFont("helvetica", bold ? "bold" : "normal");
@@ -318,10 +319,10 @@ export default function HistorialVentas() {
           if (pageIndex !== pages.length - 1) return;
           doc.setDrawColor(80);
           doc.rect(x, 8, w, height - 18);
-          font(12, true);
-          doc.text("B&B Distribuidora", x + 5, 18);
+          fit("B&B Distribuidora", x + 5, 18, w - 10, 12, "left", true);
           font(9, true);
-          doc.text("COMPROBANTE DE RECEPCIÓN", x + 5, 27);
+          doc.text("COMPROBANTE DE", x + 5, 25);
+          doc.text("RECEPCIÓN", x + 5, 29);
           doc.line(x, 32, x + w, 32);
           font(8, true);
           doc.text("CLIENTE", x + 5, 41);
@@ -402,20 +403,22 @@ export default function HistorialVentas() {
         });
         doc.line(x, footerY, x + w, footerY);
         if (pageIndex === pages.length - 1) {
+          // Resumen en columnas para aprovechar el ancho y liberar alto.
+          const colWidth = (w - 8) / 3;
           [
-            ["Subtotal", money(subtotal)], ["Descuento", money(venta.descuento)],
-            ["TOTAL", money(venta.total)], ["Pagado", money(venta.montoPagado)],
-            ["Saldo pendiente", money(venta.saldoPendiente)],
+            ["Subtotal", subtotal], ["Descuento", venta.descuento],
+            ["TOTAL", venta.total], ["Pagado", venta.montoPagado],
+            ["Saldo pendiente", venta.saldoPendiente],
           ].forEach(([label, value], i) => {
-            const yy = footerY + 5 + i * 5;
-            font(i === 2 ? 10 : 8, i === 2);
-            doc.text(label, x + 4, yy);
-            fit(value, x + w - 4, yy, w * 0.5, i === 2 ? 10 : 8, "right", i === 2);
+            const col = i % 3;
+            const row = Math.floor(i / 3);
+            fit(`${label}: ${money(value)}`, x + 4 + col * colWidth,
+              footerY + 5 + row * 5, colWidth - 3, 8, "left", i === 2);
           });
-          fit(`Pago: ${formatearFormaPago(venta.formaPago)} / ${formatearEstadoPago(venta.estadoPago)}`, x + 4, footerY + 32, w - 8);
-          fit(`Transferencia - Alias: ${DATOS_TRANSFERENCIA.alias || "-"}`, x + 4, footerY + 38, w - 8);
-          font(7);
-          doc.text("Gracias por tu compra", x + 4, footerY + 45);
+          fit(`Pago: ${formatearFormaPago(venta.formaPago)} / ${formatearEstadoPago(venta.estadoPago)}`,
+            x + 4, footerY + 15, w - 8, 8);
+          fit(`Transferencia - Alias: ${DATOS_TRANSFERENCIA.alias || "-"}`,
+            x + 4, footerY + 19, w - 8, 7);
         } else {
           font(8, true);
           doc.text("Continúa en la siguiente hoja", x + 4, footerY + 8);
