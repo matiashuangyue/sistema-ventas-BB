@@ -23,6 +23,17 @@ const sections = {
 function App() {
   const [isAuth, setIsAuth] = useState(!!getToken());
   const [activeSection, setActiveSection] = useState("ventas");
+  const [clienteCuentaId, setClienteCuentaId] = useState(null);
+
+  function navegar(section) {
+    setClienteCuentaId(null);
+    setActiveSection(section);
+  }
+
+  function abrirCuentaCorriente(clienteId) {
+    setClienteCuentaId(clienteId);
+    setActiveSection("cobranzas");
+  }
 
   const ActiveSection = sections[activeSection] || Ventas;
 
@@ -30,18 +41,23 @@ function App() {
   <Layout
     onLogout={() => {
       setIsAuth(false);
-      setActiveSection("ventas");
+      navegar("ventas");
     }}
     activeSection={activeSection}
-    onNavigate={setActiveSection}
+    onNavigate={navegar}
   >
-    <ActiveSection />
+    <ActiveSection
+      key={`${activeSection}:${clienteCuentaId ?? ""}`}
+      onAbrirCuentaCorriente={abrirCuentaCorriente}
+      clienteInicialId={clienteCuentaId}
+      onVolverVenta={clienteCuentaId != null ? () => navegar("ventas") : undefined}
+    />
   </Layout>
 ) : (
   <Login
     onLogin={() => {
       setIsAuth(true);
-      setActiveSection("ventas");
+      navegar("ventas");
     }}
   />
 );

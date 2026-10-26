@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { API_URL as API } from "../../config/api";
 import LoadingContent from "../../components/LoadingContent";
 import { getToken } from "../../services/auth";
+import AvisoDeudaCliente from "./AvisoDeudaCliente";
 
 const VENTA_DRAFT_STORAGE_KEY = "ventas:borrador:v1";
 
@@ -69,7 +70,7 @@ const FORMAS_PAGO = [
   { value: "OTRO", label: "Otro" },
 ];
 
-export default function Ventas() {
+export default function Ventas({ onAbrirCuentaCorriente }) {
   const token = getToken();
   const buscadorRef = useRef(null);
   const borradorInicialRef = useRef(leerBorradorVenta());
@@ -90,6 +91,10 @@ export default function Ventas() {
   const [clientesEncontrados, setClientesEncontrados] = useState([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState(
     borradorInicialRef.current.clienteSeleccionado,
+  );
+  const [clienteDeudaConsultadaId, setClienteDeudaConsultadaId] = useState(null);
+  const consultandoDeuda = Boolean(
+    clienteSeleccionado && clienteDeudaConsultadaId !== clienteSeleccionado.id,
   );
   const [formaPago, setFormaPago] = useState(
     borradorInicialRef.current.formaPago,
@@ -296,6 +301,7 @@ export default function Ventas() {
     setCantidadesBusqueda({});
     setClienteBusqueda("");
     setClienteSeleccionado(null);
+    setClienteDeudaConsultadaId(null);
     setClientesEncontrados([]);
     setFormaPago("EFECTIVO");
     setMontoPagado("");
@@ -557,7 +563,7 @@ export default function Ventas() {
   }, [formaPago, montoPagadoManual, total]);
 
   async function confirmarVenta() {
-    if (confirmandoVenta) {
+    if (confirmandoVenta || consultandoDeuda) {
       return;
     }
 
@@ -655,7 +661,7 @@ export default function Ventas() {
       {borradorVisible && (
         <div style={styles.borradorAviso}>
           <span>
-            Venta en curso guardada. Podes salir a actualizar stock y volver
+            Venta en curso guardada. Podes salir a realizar una cobranza o actualizar stock y volver
             sin perder los datos.
           </span>
           <button
@@ -680,6 +686,7 @@ export default function Ventas() {
     onChange={(e) => {
       setClienteBusqueda(e.target.value);
       setClienteSeleccionado(null);
+      setClienteDeudaConsultadaId(null);
     }}
   />
 
@@ -697,6 +704,7 @@ export default function Ventas() {
         disabled={confirmandoVenta}
         onClick={() => {
           setClienteSeleccionado(null);
+          setClienteDeudaConsultadaId(null);
           setClienteBusqueda("");
           setClientesEncontrados([]);
         }}
@@ -713,6 +721,7 @@ export default function Ventas() {
             style={styles.clienteItem}
             onClick={() => {
               setClienteSeleccionado(cliente);
+              setClienteDeudaConsultadaId(null);
               setClienteBusqueda(cliente.nombre);
               setClientesEncontrados([]);
             }}
@@ -731,6 +740,16 @@ export default function Ventas() {
     <div style={styles.clienteFallback}>
       Si no seleccionás un cliente, la venta se registra como <strong>Consumidor Final</strong>.
     </div>
+  )}
+
+  {clienteSeleccionado && (
+    <AvisoDeudaCliente
+      key={clienteSeleccionado.id}
+      cliente={clienteSeleccionado}
+      onAbrirCuentaCorriente={onAbrirCuentaCorriente}
+      onConsultaFinalizada={setClienteDeudaConsultadaId}
+      deshabilitado={confirmandoVenta}
+    />
   )}
 </div>
 
@@ -1058,11 +1077,11 @@ export default function Ventas() {
         <button
           style={styles.btnConfirmar}
           onClick={confirmarVenta}
-          disabled={confirmandoVenta || cargandoVariantesCarrito}
+          disabled={confirmandoVenta || cargandoVariantesCarrito || consultandoDeuda}
         >
           <LoadingContent
-            loading={confirmandoVenta}
-            loadingText="Procesando venta..."
+            loading={confirmandoVenta || consultandoDeuda}
+            loadingText={confirmandoVenta ? "Procesando venta..." : "Consultando deuda..."}
           >
             Confirmar venta
           </LoadingContent>

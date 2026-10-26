@@ -112,12 +112,16 @@ async function obtenerResumenCobranzas({
   return data;
 }
 
-export default function Cobranzas() {
+export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
   const [busqueda, setBusqueda] = useState("");
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [cuenta, setCuenta] = useState(null);
-  const [loadingCuenta, setLoadingCuenta] = useState(false);
+  const [loadingCuenta, setLoadingCuenta] = useState(clienteInicialId != null);
+  const [errorCuenta, setErrorCuenta] = useState("");
+  const [solicitudCuenta, setSolicitudCuenta] = useState(() =>
+    clienteInicialId != null ? { clienteId: clienteInicialId } : null,
+  );
   const [paginaClientes, setPaginaClientes] = useState(1);
   const [totalClientes, setTotalClientes] = useState(0);
   const [totalPaginasClientes, setTotalPaginasClientes] = useState(1);
@@ -171,27 +175,49 @@ export default function Cobranzas() {
     };
   }, [busqueda, paginaClientes, soloConDeuda]);
 
-  async function verCuenta(clienteId) {
-    try {
-      setLoadingCuenta(true);
+  useEffect(() => {
+    if (!solicitudCuenta) return;
 
-      const res = await fetch(
-        `${API}/cobranzas/clientes/${clienteId}/cuenta-corriente`,
-      );
-      const data = await res.json();
+    const controller = new AbortController();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Error cargando cuenta corriente");
+    async function cargarCuenta() {
+      try {
+        const res = await fetch(
+          `${API}/cobranzas/clientes/${solicitudCuenta.clienteId}/cuenta-corriente`,
+          { signal: controller.signal },
+        );
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Error cargando cuenta corriente");
+        }
+
+        if (!controller.signal.aborted) {
+          setCuenta(data);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.error(error);
+          setErrorCuenta(error.message);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingCuenta(false);
+        }
       }
-
-      setCuenta(data);
-      setVentasDetalleAbiertas({});
-    } catch (error) {
-      console.error(error);
-      alert(error.message);
-    } finally {
-      setLoadingCuenta(false);
     }
+
+    cargarCuenta();
+
+    return () => controller.abort();
+  }, [solicitudCuenta]);
+
+  function verCuenta(clienteId) {
+    setLoadingCuenta(true);
+    setErrorCuenta("");
+    setCuenta(null);
+    setVentasDetalleAbiertas({});
+    setSolicitudCuenta({ clienteId });
   }
 
   function abrirCobro(venta) {
@@ -302,6 +328,16 @@ export default function Cobranzas() {
     <div style={styles.container}>
       <div style={styles.header}>
         <h2 style={styles.title}>Cobranzas</h2>
+        {onVolverVenta && (
+          <button
+            style={styles.btnSecundario}
+            onClick={onVolverVenta}
+            disabled={registrandoCobro}
+            type="button"
+          >
+            Volver a la venta
+          </button>
+        )}
       </div>
 
       <div style={styles.bloque}>
@@ -436,7 +472,20 @@ export default function Cobranzas() {
             </div>
           )}
 
-          {!loadingCuenta && !cuenta && (
+          {!loadingCuenta && errorCuenta && (
+            <div style={styles.empty} role="alert">
+              <p>{errorCuenta}</p>
+              <button
+                style={styles.btnSecundario}
+                onClick={() => verCuenta(solicitudCuenta.clienteId)}
+                type="button"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          {!loadingCuenta && !errorCuenta && !cuenta && (
             <div style={styles.empty}>
               Selecciona un cliente para ver su cuenta corriente.
             </div>
@@ -669,7 +718,7 @@ export default function Cobranzas() {
 
 const styles = {
   container: { display: "flex", flexDirection: "column", gap: 16 },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  header: { display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", alignItems: "center" },
   title: { margin: 0, fontSize: 20 },
   bloque: {
     background: "var(--surface)",
