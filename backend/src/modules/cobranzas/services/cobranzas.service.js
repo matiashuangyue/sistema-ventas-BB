@@ -379,6 +379,7 @@ async function registrarCobro(dto) {
   const formaPago = normalizarFormaPago(dto.formaPago);
 
   const clienteId = await cobranzasRepository.transaction(async (tx) => {
+    await cobranzasRepository.lockVenta(tx, dto.ventaId);
     const venta = await cobranzasRepository.findVentaParaCobro(tx, dto.ventaId);
 
     if (!venta) {

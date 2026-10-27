@@ -2,6 +2,7 @@ const express = require("express");
 
 const handleControllerError = require("../../../shared/http/handle-controller-error");
 const ActualizarPagoVentaDto = require("../models/dtos/actualizar-pago-venta.dto");
+const ActualizarVentaDto = require("../models/dtos/actualizar-venta.dto");
 const CrearVentaDto = require("../models/dtos/crear-venta.dto");
 const HistorialVentasFiltroDto = require("../models/dtos/historial-ventas-filtro.dto");
 const ventasService = require("../services/ventas.service");
@@ -45,6 +46,18 @@ router.get("/:id", async (req, res) => {
     res.json(venta);
   } catch (error) {
     handleControllerError(res, error, "Error obteniendo detalle de venta");
+  }
+});
+
+router.patch("/:id", async (req, res) => {
+  try {
+    const venta = await ventasService.actualizarVenta(
+      req.params.id,
+      ActualizarVentaDto.from(req.body),
+    );
+    res.json(venta);
+  } catch (error) {
+    handleControllerError(res, error, "Error actualizando venta", 400);
   }
 });
 

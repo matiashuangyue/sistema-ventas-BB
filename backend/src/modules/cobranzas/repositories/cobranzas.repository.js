@@ -24,6 +24,10 @@ function transaction(callback) {
   return prisma.$transaction(callback);
 }
 
+function lockVenta(client, ventaId) {
+  return client.$queryRaw`SELECT "id" FROM "Venta" WHERE "id" = ${ventaId} FOR UPDATE`;
+}
+
 function createCobro(client, data) {
   return client.cobro.create({ data });
 }
@@ -100,6 +104,7 @@ function updateVentaPago(client, ventaId, data) {
 }
 
 module.exports = {
+  lockVenta,
   createCobro,
   findCobrosEntreFechas,
   findClienteConCuenta,

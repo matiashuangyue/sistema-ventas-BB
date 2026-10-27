@@ -23,6 +23,31 @@ function transaction(callback, options) {
   return prisma.$transaction(callback, options);
 }
 
+function lockVenta(client, id) {
+  return client.$queryRaw`SELECT "id" FROM "Venta" WHERE "id" = ${id} FOR UPDATE`;
+}
+
+function findVarianteForEdit(client, id) {
+  return client.variante.findUnique({ where: { id }, include: { producto: true } });
+}
+
+function adjustStockForEdit(client, id, delta) {
+  return client.variante.updateMany({
+    where: { id, ...(delta < 0 ? { stock: { gte: -delta } } : {}) },
+    data: { stock: { increment: delta } },
+  });
+}
+
+function updateVentaDetalle(client, id, data) {
+  return client.ventaDetalle.update({ where: { id }, data });
+}
+
+function deleteVentaDetallesExcept(client, ventaId, ids) {
+  return client.ventaDetalle.deleteMany({
+    where: { ventaId, id: { notIn: ids } },
+  });
+}
+
 function createVenta(client, data) {
   return client.venta.create({ data });
 }
@@ -169,14 +194,17 @@ function updateVenta(client, id, data) {
 }
 
 module.exports = {
+  adjustStockForEdit,
   createCobro,
   createVenta,
   createVentaDetalle,
   deleteCobrosByVentaId,
   deleteVenta,
   deleteVentaDetalles,
+  deleteVentaDetallesExcept,
   findPreciosDisponibles,
   findVariante,
+  findVarianteForEdit,
   findVentaById,
   findVentaByIdInTransaction,
   findVentaWithDetalles,
@@ -184,7 +212,9 @@ module.exports = {
   findVentasHistorial,
   findVentasHistorialPage,
   transaction,
+  lockVenta,
   updateStockVariantesByDeltas,
   updateStockVariante,
   updateVenta,
+  updateVentaDetalle,
 };

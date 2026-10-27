@@ -1,3 +1,4 @@
+const { createHash } = require("node:crypto");
 const AppError = require("../../../shared/errors/app-error");
 const logger = require("../../../shared/logger/logger");
 const ventasRepository = require("../repositories/ventas.repository");
@@ -25,6 +26,10 @@ function normalizarFormaPago(formaPago) {
 }
 
 function calcularEstadoPago(total, montoPagado) {
+  if (montoPagado >= total) {
+    return "PAGADA";
+  }
+
   if (montoPagado <= 0) {
     return "PENDIENTE";
   }
@@ -129,6 +134,154 @@ function agruparCantidadesPorVariante(items) {
   }));
 }
 
+function conVersionEdicion(venta) {
+  // Solo datos de la venta: cambios de catalogo o stock no invalidan el borrador.
+  const { id, clienteId, fecha, subtotal, descuento, total, montoPagado,
+    saldoPendiente, estadoPago, formaPago, observacionesPago } = venta;
+  const versionEdicion = createHash("sha256").update(JSON.stringify({
+    id, clienteId, fecha, subtotal, descuento, total, montoPagado,
+    saldoPendiente, estadoPago, formaPago, observacionesPago,
+    detalles: [...venta.detalles].sort((a, b) => a.id - b.id).map((detalle) => ({
+      id: detalle.id,
+      varianteId: detalle.varianteId,
+      cantidad: detalle.cantidad,
+      precioUnitario: detalle.precioUnitario,
+      subtotal: detalle.subtotal,
+      descuentoItem: detalle.descuentoItem,
+    })),
+    cobros: [...venta.cobros].sort((a, b) => a.id - b.id).map((cobro) => ({
+      id: cobro.id,
+      monto: cobro.monto,
+      fecha: cobro.fecha,
+      formaPago: cobro.formaPago,
+      observaciones: cobro.observaciones,
+    })),
+  })).digest("hex");
+  return { ...venta, versionEdicion };
+}
+
+function esIdValido(valor) {
+  return Number.isInteger(valor) && valor > 0 && valor <= 2147483647;
+}
+
+function esMontoValido(valor) {
+  return typeof valor === "number" && Number.isFinite(valor) && valor >= 0 &&
+    Number.isSafeInteger(Math.round(valor * 100));
+}
+
+async function actualizarVenta(id, dto) {
+  const ventaId = Number(id);
+  if (!esIdValido(ventaId)) throw new AppError("ID de venta invalido");
+  if (!Array.isArray(dto.items) || dto.items.length === 0) {
+    throw new AppError("La venta debe incluir al menos un producto");
+  }
+  if (typeof dto.version !== "string" || !dto.version) {
+    throw new AppError("Volve a abrir la venta antes de editarla", 409);
+  }
+  if (!esMontoValido(dto.descuento)) throw new AppError("Descuento invalido");
+
+  for (const item of dto.items) {
+    if (!item || !esIdValido(item.varianteId) || !esIdValido(item.cantidad) ||
+        (item.detalleId != null && !esIdValido(item.detalleId))) {
+      throw new AppError("Cada producto debe tener una cantidad entera mayor a 0");
+    }
+    if (!esMontoValido(item.precioUnitario)) {
+      throw new AppError("El precio unitario debe ser un numero mayor o igual a 0");
+    }
+  }
+
+  try {
+    const resultado = await ventasRepository.transaction(async (tx) => {
+      await ventasRepository.lockVenta(tx, ventaId);
+      const venta = await ventasRepository.findVentaByIdInTransaction(tx, ventaId);
+      if (!venta) throw new AppError("Venta no encontrada", 404);
+      if (dto.version !== conVersionEdicion(venta).versionEdicion) {
+        throw new AppError("La venta cambio mientras la editabas. Volve a abrirla para ver los datos actuales", 409);
+      }
+
+      const detallesOriginales = new Map(venta.detalles.map((item) => [item.id, item]));
+      const idsConservados = new Set();
+      const items = dto.items.map((item) => {
+        if (item.detalleId != null) {
+          const original = detallesOriginales.get(item.detalleId);
+          if (!original || original.varianteId !== item.varianteId || idsConservados.has(item.detalleId)) {
+            throw new AppError("El detalle no corresponde a la venta o esta repetido");
+          }
+          idsConservados.add(item.detalleId);
+        }
+        const subtotal = redondearMonto(item.precioUnitario * item.cantidad);
+        if (!esMontoValido(subtotal)) throw new AppError("Importe de producto invalido");
+        return { ...item, subtotal };
+      });
+      const subtotal = redondearMonto(items.reduce((suma, item) => suma + item.subtotal, 0));
+      if (!esMontoValido(subtotal)) throw new AppError("Subtotal invalido");
+      const descuento = redondearMonto(dto.descuento);
+      if (descuento > subtotal) throw new AppError("El descuento no puede ser mayor al subtotal");
+      const total = redondearMonto(subtotal - descuento);
+      const saldoPendiente = redondearMonto(total - venta.montoPagado);
+      if (saldoPendiente < 0) {
+        throw new AppError("El nuevo total es menor que lo ya cobrado. Revisa los pagos registrados antes de reducir la venta");
+      }
+      if (saldoPendiente > 0 && !venta.clienteId) {
+        throw new AppError("La venta no tiene cliente asociado y no puede quedar con saldo pendiente");
+      }
+
+      const cantidadesAnteriores = new Map(agruparCantidadesPorVariante(venta.detalles)
+        .map(({ varianteId, cantidad }) => [varianteId, cantidad]));
+      const cantidadesNuevas = new Map(agruparCantidadesPorVariante(items)
+        .map(({ varianteId, cantidad }) => [varianteId, cantidad]));
+      const variantes = [...new Set([...cantidadesAnteriores.keys(), ...cantidadesNuevas.keys()])]
+        .sort((a, b) => a - b);
+
+      for (const varianteId of variantes) {
+        const anterior = cantidadesAnteriores.get(varianteId) || 0;
+        const cantidad = cantidadesNuevas.get(varianteId) || 0;
+        if (cantidad > 2147483647) throw new AppError("Cantidad de producto invalida");
+        const variante = await ventasRepository.findVarianteForEdit(tx, varianteId);
+        if (!variante) throw new AppError("Variante no encontrada");
+        if (cantidad > anterior && (!variante.activo || !variante.producto?.activo)) {
+          throw new AppError(`El producto ${variante.nombre} ya no esta activo`);
+        }
+        const delta = anterior - cantidad;
+        if (delta === 0) continue;
+        const actualizado = await ventasRepository.adjustStockForEdit(tx, varianteId, delta);
+        if (actualizado.count !== 1) {
+          throw new AppError(`Stock insuficiente para ${variante.nombre}`);
+        }
+      }
+
+      await ventasRepository.deleteVentaDetallesExcept(tx, ventaId, [...idsConservados]);
+      for (const item of items) {
+        const data = {
+          varianteId: item.varianteId,
+          cantidad: item.cantidad,
+          precioUnitario: item.precioUnitario,
+          subtotal: item.subtotal,
+        };
+        if (item.detalleId != null) {
+          await ventasRepository.updateVentaDetalle(tx, item.detalleId, data);
+        } else {
+          await ventasRepository.createVentaDetalle(tx, { ...data, ventaId });
+        }
+      }
+
+      // Los cobros (incluidas sus fechas) se conservan: solo cambia la deuda.
+      return ventasRepository.updateVenta(tx, ventaId, {
+        subtotal, descuento, total, saldoPendiente,
+        estadoPago: calcularEstadoPago(total, venta.montoPagado),
+      });
+    }, { timeout: 30000 });
+
+    logger.info(`Venta ${ventaId} editada correctamente`);
+    return conVersionEdicion(resultado);
+  } catch (error) {
+    if (error.code === "P2034" || error.code === "40P01") {
+      throw new AppError("La venta o el stock cambiaron durante el guardado. Volve a abrir la venta e intenta nuevamente", 409);
+    }
+    throw error;
+  }
+}
+
 async function crearVenta(dto) {
   logger.info(
     `Se inicia la creacion de venta para cliente ${dto.clienteId || "consumidor final"} con ${dto.items.length} items`,
@@ -230,11 +383,10 @@ async function crearVenta(dto) {
           subtotal: subtotalItem,
         });
 
-        await ventasRepository.updateStockVariante(tx, varianteId, {
-          stock: {
-            decrement: cantidad,
-          },
-        });
+        const stockActualizado = await ventasRepository.adjustStockForEdit(tx, varianteId, -cantidad);
+        if (stockActualizado.count !== 1) {
+          throw new AppError(`Stock insuficiente para ${variante.nombre}`);
+        }
       }
 
       if (dto.descuento > subtotal) {
@@ -416,7 +568,7 @@ async function obtenerVentaPorId(id) {
 
   logger.info(`Venta ${id} encontrada correctamente`);
 
-  return venta;
+  return conVersionEdicion(venta);
 }
 
 async function actualizarPagoVenta(id, dto) {
@@ -430,6 +582,7 @@ async function actualizarPagoVenta(id, dto) {
   }
 
   const ventaActualizada = await ventasRepository.transaction(async (tx) => {
+    await ventasRepository.lockVenta(tx, ventaId);
     const venta = await ventasRepository.findVentaByIdInTransaction(tx, ventaId);
 
     if (!venta) {
@@ -473,7 +626,7 @@ async function actualizarPagoVenta(id, dto) {
 
   logger.info(`Pago de venta ${ventaId} actualizado correctamente`);
 
-  return ventaActualizada;
+  return conVersionEdicion(ventaActualizada);
 }
 
 async function eliminarVenta(id) {
@@ -487,6 +640,7 @@ async function eliminarVenta(id) {
   }
 
   const resultado = await ventasRepository.transaction(async (tx) => {
+    await ventasRepository.lockVenta(tx, ventaId);
     const venta = await ventasRepository.findVentaWithDetalles(tx, ventaId);
 
     if (!venta) {
@@ -516,6 +670,7 @@ async function eliminarVenta(id) {
 }
 
 module.exports = {
+  actualizarVenta,
   actualizarPagoVenta,
   crearVenta,
   eliminarVenta,

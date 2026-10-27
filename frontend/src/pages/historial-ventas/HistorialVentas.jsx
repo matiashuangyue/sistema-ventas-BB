@@ -3,6 +3,7 @@ import jsPDF from "jspdf";
 
 import LoadingContent from "../../components/LoadingContent";
 import { API_URL as API } from "../../config/api";
+import EditorVenta from "./EditorVenta";
 
 const HISTORIAL_PAGE_SIZE = 10;
 
@@ -125,6 +126,8 @@ export default function HistorialVentas() {
   const [pagoMonto, setPagoMonto] = useState("");
   const [pagoObservaciones, setPagoObservaciones] = useState("");
   const [guardandoPago, setGuardandoPago] = useState(false);
+  const [ventaEditOpen, setVentaEditOpen] = useState(false);
+  const [mensajeVenta, setMensajeVenta] = useState("");
 
   useEffect(() => {
     let cancelado = false;
@@ -204,7 +207,7 @@ export default function HistorialVentas() {
   }
 
   async function verDetalle(id) {
-    if (detalleVentaCargandoId || eliminandoVenta) return;
+    if (detalleVentaCargandoId || eliminandoVenta || ventaEditOpen || guardandoPago) return;
 
     try {
       setDetalleVentaCargandoId(id);
@@ -217,6 +220,8 @@ export default function HistorialVentas() {
 
       setVentaDetalle(data);
       setPagoEditOpen(false);
+      setVentaEditOpen(false);
+      setMensajeVenta("");
       setPagoForma(data.formaPago || "EFECTIVO");
       setPagoMonto(String(data.montoPagado || 0));
       setPagoObservaciones(data.observacionesPago || "");
@@ -436,18 +441,30 @@ export default function HistorialVentas() {
     setDetalleOpen(false);
     setVentaDetalle(null);
     setPagoEditOpen(false);
+    setVentaEditOpen(false);
+    setMensajeVenta("");
     setPagoMonto("");
     setPagoForma("EFECTIVO");
     setPagoObservaciones("");
   }
 
   function abrirEditorPago() {
-    if (!ventaDetalle) return;
+    if (!ventaDetalle || ventaEditOpen) return;
 
     setPagoForma(ventaDetalle.formaPago || "EFECTIVO");
     setPagoMonto(String(ventaDetalle.montoPagado || 0));
     setPagoObservaciones(ventaDetalle.observacionesPago || "");
     setPagoEditOpen(true);
+  }
+
+  async function ventaGuardada(data) {
+    setVentaDetalle(data);
+    setVentaEditOpen(false);
+    setPagoForma(data.formaPago || "EFECTIVO");
+    setPagoMonto(String(data.montoPagado || 0));
+    setPagoObservaciones(data.observacionesPago || "");
+    setMensajeVenta("Venta actualizada. El stock y la cuenta corriente ya reflejan los cambios.");
+    await cargarVentas();
   }
 
   function dejarVentaPendiente() {
@@ -707,12 +724,12 @@ export default function HistorialVentas() {
         <>
           <div
             style={styles.overlay}
-            onClick={eliminandoVenta || guardandoPago ? undefined : cerrarDetalle}
+            onClick={eliminandoVenta || guardandoPago || ventaEditOpen ? undefined : cerrarDetalle}
           ></div>
 
-          <div style={styles.modal}>
-            <h3 style={styles.modalTitle}>
-              Detalle de venta #{ventaDetalle.id}
+          <div style={{ ...styles.modal, ...(ventaEditOpen ? { maxWidth: 700 } : {}) }} role="dialog" aria-modal="true" aria-labelledby="titulo-detalle-venta">
+            <h3 id="titulo-detalle-venta" style={styles.modalTitle}>
+              {ventaEditOpen ? "Modificar" : "Detalle de"} venta #{ventaDetalle.id}
             </h3>
 
             <div style={styles.detalleInfo}>
@@ -730,6 +747,17 @@ export default function HistorialVentas() {
               </div>
             </div>
 
+            {mensajeVenta && <div role="status" style={{ ...styles.pagoEditorBox, background: "var(--surface-success)" }}>{mensajeVenta}</div>}
+
+            {ventaEditOpen ? (
+              <EditorVenta
+                key={ventaDetalle.id}
+                venta={ventaDetalle}
+                onCancelar={() => setVentaEditOpen(false)}
+                onGuardada={ventaGuardada}
+              />
+            ) : (
+            <>
             <div style={styles.pagoEditorBox}>
               <div style={styles.pagoEditorHeader}>
                 <strong>Estado de pago</strong>
@@ -873,6 +901,15 @@ export default function HistorialVentas() {
 
             <div style={styles.modalActions}>
               <button
+                style={styles.btnPrincipal}
+                onClick={() => { setMensajeVenta(""); setVentaEditOpen(true); }}
+                disabled={eliminandoVenta || guardandoPago || pagoEditOpen}
+                type="button"
+              >
+                Modificar venta
+              </button>
+
+              <button
                 style={styles.btnSecundario}
                 onClick={cerrarDetalle}
                 disabled={eliminandoVenta || guardandoPago}
@@ -901,6 +938,8 @@ export default function HistorialVentas() {
                 Descargar PDF
               </button>
             </div>
+            </>
+            )}
           </div>
         </>
       )}
