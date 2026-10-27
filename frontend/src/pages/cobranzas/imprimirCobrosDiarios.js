@@ -33,6 +33,17 @@ export function formatearDiaCobros(fecha) {
   return fecha.split("-").reverse().join("/");
 }
 
+export function obtenerFechaActualCobros(ahora = new Date()) {
+  const partes = new Intl.DateTimeFormat("en", {
+    timeZone: ZONA_HORARIA,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(ahora);
+  const valores = Object.fromEntries(partes.map(({ type, value }) => [type, value]));
+  return `${valores.year}-${valores.month}-${valores.day}`;
+}
+
 export function crearHtmlCobrosDiarios(reporte) {
   const fecha = escaparHtml(formatearDiaCobros(reporte.fecha));
   const generado = escaparHtml(new Date().toLocaleString("es-AR", {
@@ -134,21 +145,22 @@ export function crearHtmlCobrosDiarios(reporte) {
 </html>`;
 }
 
-export function abrirVentanaCobros() {
+export function abrirVentanaCobros(fecha) {
   // Se abre durante el clic, antes de consultar la API, para evitar bloqueos.
   const ventana = window.open("", "_blank");
   if (!ventana) {
     throw new Error("El navegador bloqueó el listado. Permití las ventanas emergentes para este sitio y volvé a intentar.");
   }
   ventana.opener = null;
-  ventana.document.title = "Preparando cobranzas del día";
-  ventana.document.body.textContent = "Preparando el listado de cobranzas del día…";
+  const dia = formatearDiaCobros(fecha);
+  ventana.document.title = `Preparando cobranzas del ${dia}`;
+  ventana.document.body.textContent = `Preparando el listado de cobranzas del ${dia}…`;
   return ventana;
 }
 
 export function imprimirCobrosDiarios(ventana, reporte) {
   if (ventana.closed) {
-    throw new Error("Se cerró el listado antes de terminar. Volvé a presionar Imprimir cobranzas del día.");
+    throw new Error("Se cerró el listado antes de terminar. Volvé a presionar Imprimir cobranzas.");
   }
 
   const documento = new DOMParser().parseFromString(crearHtmlCobrosDiarios(reporte), "text/html");

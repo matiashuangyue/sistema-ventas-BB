@@ -5,6 +5,7 @@ import {
   abrirVentanaCobros,
   formatearDiaCobros,
   imprimirCobrosDiarios,
+  obtenerFechaActualCobros,
 } from "./imprimirCobrosDiarios";
 
 const COBRANZAS_PAGE_SIZE = 10;
@@ -139,6 +140,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
   const [formaCobro, setFormaCobro] = useState("EFECTIVO");
   const [observacionesCobro, setObservacionesCobro] = useState("");
   const [registrandoCobro, setRegistrandoCobro] = useState(false);
+  const [fechaListado, setFechaListado] = useState(() => obtenerFechaActualCobros());
   const [preparandoListado, setPreparandoListado] = useState(false);
   const [avisoListado, setAvisoListado] = useState(null);
 
@@ -277,14 +279,19 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
 
   async function imprimirCobranzasDelDia() {
     if (preparandoListado || registrandoCobro) return;
+    if (!fechaListado) {
+      setAvisoListado({ error: true, texto: "Elegí una fecha para imprimir las cobranzas." });
+      return;
+    }
 
     let ventana;
     setAvisoListado(null);
     setPreparandoListado(true);
 
     try {
-      ventana = abrirVentanaCobros();
-      const res = await fetch(`${API}/cobranzas/cobros`, { cache: "no-store" });
+      ventana = abrirVentanaCobros(fechaListado);
+      const params = new URLSearchParams({ fecha: fechaListado });
+      const res = await fetch(`${API}/cobranzas/cobros?${params}`, { cache: "no-store" });
       const reporte = await res.json();
 
       if (!res.ok) {
@@ -293,7 +300,10 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
 
       if (reporte.items.length === 0) {
         ventana.close();
-        setAvisoListado({ error: false, texto: "No hay cobranzas registradas hoy." });
+        setAvisoListado({
+          error: false,
+          texto: `No hay cobranzas registradas el ${formatearDiaCobros(reporte.fecha)}.`,
+        });
         return;
       }
 
@@ -375,16 +385,53 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
       <div style={styles.header}>
         <h2 style={styles.title}>Cobranzas</h2>
         <div style={styles.headerActions}>
-          <button
-            style={styles.btnPrincipal}
-            onClick={imprimirCobranzasDelDia}
-            disabled={preparandoListado || registrandoCobro}
-            type="button"
+          <form
+            style={styles.listadoActions}
+            onSubmit={(event) => {
+              event.preventDefault();
+              imprimirCobranzasDelDia();
+            }}
           >
-            <LoadingContent loading={preparandoListado} loadingText="Preparando listado...">
-              Imprimir cobranzas del día
-            </LoadingContent>
-          </button>
+            <div>
+              <label htmlFor="fecha-listado-cobranzas" style={styles.label}>
+                Fecha de cobranzas
+              </label>
+              <input
+                id="fecha-listado-cobranzas"
+                style={styles.input}
+                type="date"
+                min="0001-01-01"
+                max="9999-12-31"
+                required
+                value={fechaListado}
+                disabled={preparandoListado || registrandoCobro}
+                onChange={(event) => {
+                  setFechaListado(event.target.value);
+                  setAvisoListado(null);
+                }}
+              />
+            </div>
+            <button
+              style={styles.btnSecundario}
+              disabled={preparandoListado || registrandoCobro}
+              type="button"
+              onClick={() => {
+                setFechaListado(obtenerFechaActualCobros());
+                setAvisoListado(null);
+              }}
+            >
+              Hoy
+            </button>
+            <button
+              style={styles.btnPrincipal}
+              disabled={preparandoListado || registrandoCobro || !fechaListado}
+              type="submit"
+            >
+              <LoadingContent loading={preparandoListado} loadingText="Preparando listado...">
+                Imprimir cobranzas
+              </LoadingContent>
+            </button>
+          </form>
           {onVolverVenta && (
             <button
               style={styles.btnSecundario}
@@ -786,7 +833,8 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
 const styles = {
   container: { display: "flex", flexDirection: "column", gap: 16 },
   header: { display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", alignItems: "center" },
-  headerActions: { display: "flex", flexWrap: "wrap", gap: 8 },
+  headerActions: { display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 },
+  listadoActions: { display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 8 },
   title: { margin: 0, fontSize: 20 },
   bloque: {
     background: "var(--surface)",
