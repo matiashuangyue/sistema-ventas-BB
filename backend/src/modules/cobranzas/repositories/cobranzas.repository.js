@@ -28,6 +28,23 @@ function createCobro(client, data) {
   return client.cobro.create({ data });
 }
 
+function findCobrosEntreFechas(desde, hasta) {
+  return prisma.cobro.findMany({
+    where: { fecha: { gte: desde, lt: hasta } },
+    orderBy: [{ fecha: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      fecha: true,
+      clienteId: true,
+      cliente: { select: { id: true, nombre: true } },
+      ventaId: true,
+      monto: true,
+      formaPago: true,
+      observaciones: true,
+    },
+  });
+}
+
 function findClienteConCuenta(clienteId) {
   return prisma.cliente.findUnique({
     where: { id: clienteId },
@@ -84,6 +101,7 @@ function updateVentaPago(client, ventaId, data) {
 
 module.exports = {
   createCobro,
+  findCobrosEntreFechas,
   findClienteConCuenta,
   findClientesConCuenta,
   findVentaParaCobro,

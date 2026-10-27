@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { API_URL as API } from "../../config/api";
 import LoadingContent from "../../components/LoadingContent";
+import {
+  abrirVentanaCobros,
+  formatearDiaCobros,
+  imprimirCobrosDiarios,
+} from "./imprimirCobrosDiarios";
 
 const COBRANZAS_PAGE_SIZE = 10;
 
@@ -134,6 +139,8 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
   const [formaCobro, setFormaCobro] = useState("EFECTIVO");
   const [observacionesCobro, setObservacionesCobro] = useState("");
   const [registrandoCobro, setRegistrandoCobro] = useState(false);
+  const [preparandoListado, setPreparandoListado] = useState(false);
+  const [avisoListado, setAvisoListado] = useState(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -268,6 +275,44 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
     }));
   }
 
+  async function imprimirCobranzasDelDia() {
+    if (preparandoListado || registrandoCobro) return;
+
+    let ventana;
+    setAvisoListado(null);
+    setPreparandoListado(true);
+
+    try {
+      ventana = abrirVentanaCobros();
+      const res = await fetch(`${API}/cobranzas/cobros`, { cache: "no-store" });
+      const reporte = await res.json();
+
+      if (!res.ok) {
+        throw new Error(reporte.error || "No se pudo cargar el listado de cobranzas.");
+      }
+
+      if (reporte.items.length === 0) {
+        ventana.close();
+        setAvisoListado({ error: false, texto: "No hay cobranzas registradas hoy." });
+        return;
+      }
+
+      imprimirCobrosDiarios(ventana, reporte);
+      setAvisoListado({
+        error: false,
+        texto: `Listado del ${formatearDiaCobros(reporte.fecha)} listo para imprimir.`,
+      });
+    } catch (error) {
+      if (ventana && !ventana.closed) ventana.close();
+      setAvisoListado({
+        error: true,
+        texto: error.message || "No se pudo preparar el listado de cobranzas.",
+      });
+    } finally {
+      setPreparandoListado(false);
+    }
+  }
+
   async function registrarCobro() {
     if (!ventaCobro) return;
 
@@ -303,6 +348,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
       }
 
       setCuenta(data);
+      setAvisoListado(null);
       const resumen = await obtenerResumenCobranzas({
         cliente: busqueda,
         page: paginaClientes,
@@ -328,17 +374,38 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
     <div style={styles.container}>
       <div style={styles.header}>
         <h2 style={styles.title}>Cobranzas</h2>
-        {onVolverVenta && (
+        <div style={styles.headerActions}>
           <button
-            style={styles.btnSecundario}
-            onClick={onVolverVenta}
-            disabled={registrandoCobro}
+            style={styles.btnPrincipal}
+            onClick={imprimirCobranzasDelDia}
+            disabled={preparandoListado || registrandoCobro}
             type="button"
           >
-            Volver a la venta
+            <LoadingContent loading={preparandoListado} loadingText="Preparando listado...">
+              Imprimir cobranzas del día
+            </LoadingContent>
           </button>
-        )}
+          {onVolverVenta && (
+            <button
+              style={styles.btnSecundario}
+              onClick={onVolverVenta}
+              disabled={registrandoCobro}
+              type="button"
+            >
+              Volver a la venta
+            </button>
+          )}
+        </div>
       </div>
+
+      {avisoListado && (
+        <div
+          style={{ ...styles.bloque, color: avisoListado.error ? "var(--danger)" : "var(--text-soft)" }}
+          role={avisoListado.error ? "alert" : "status"}
+        >
+          {avisoListado.texto}
+        </div>
+      )}
 
       <div style={styles.bloque}>
         <label style={styles.label}>Buscar cliente</label>
@@ -719,6 +786,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
 const styles = {
   container: { display: "flex", flexDirection: "column", gap: 16 },
   header: { display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", alignItems: "center" },
+  headerActions: { display: "flex", flexWrap: "wrap", gap: 8 },
   title: { margin: 0, fontSize: 20 },
   bloque: {
     background: "var(--surface)",

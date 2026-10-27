@@ -2,6 +2,8 @@ const AppError = require("../../../shared/errors/app-error");
 const logger = require("../../../shared/logger/logger");
 const cobranzasRepository = require("../repositories/cobranzas.repository");
 
+const ZONA_HORARIA_COBRANZAS = "America/Argentina/Buenos_Aires";
+
 const FORMAS_COBRO_VALIDAS = new Set([
   "EFECTIVO",
   "TRANSFERENCIA",
@@ -11,6 +13,73 @@ const FORMAS_COBRO_VALIDAS = new Set([
 
 function redondearMonto(valor) {
   return Math.round(Number(valor) * 100) / 100;
+}
+
+function obtenerRangoDia(fecha) {
+  if (fecha === undefined) {
+    const partes = new Intl.DateTimeFormat("en", {
+      timeZone: ZONA_HORARIA_COBRANZAS,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const valores = Object.fromEntries(partes.map(({ type, value }) => [type, value]));
+    fecha = `${valores.year}-${valores.month}-${valores.day}`;
+  }
+
+  if (
+    typeof fecha !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(fecha) ||
+    fecha.startsWith("0000-")
+  ) {
+    throw new AppError("La fecha debe ser una fecha valida con formato AAAA-MM-DD");
+  }
+
+  const fechaCalendario = new Date(`${fecha}T00:00:00Z`);
+  if (
+    !Number.isFinite(fechaCalendario.getTime()) ||
+    fechaCalendario.toISOString().slice(0, 10) !== fecha
+  ) {
+    throw new AppError("La fecha debe ser una fecha valida con formato AAAA-MM-DD");
+  }
+
+  // La jornada se mide en Argentina (UTC-03), independientemente del servidor.
+  const desde = new Date(`${fecha}T00:00:00-03:00`);
+  const hasta = new Date(desde.getTime() + 24 * 60 * 60 * 1000);
+
+  return { fecha, desde, hasta };
+}
+
+async function listarCobrosDelDia(fechaSolicitada) {
+  const { fecha, desde, hasta } = obtenerRangoDia(fechaSolicitada);
+  const items = await cobranzasRepository.findCobrosEntreFechas(desde, hasta);
+  const porFormaPago = new Map();
+  let totalCentavos = 0;
+
+  for (const cobro of items) {
+    const centavos = Math.round(Number(cobro.monto) * 100);
+    totalCentavos += centavos;
+    const acumulado = porFormaPago.get(cobro.formaPago) || {
+      cantidadCobros: 0,
+      centavos: 0,
+    };
+    acumulado.cantidadCobros += 1;
+    acumulado.centavos += centavos;
+    porFormaPago.set(cobro.formaPago, acumulado);
+  }
+
+  return {
+    fecha,
+    zonaHoraria: ZONA_HORARIA_COBRANZAS,
+    items,
+    cantidadCobros: items.length,
+    totalCobrado: totalCentavos / 100,
+    totalesPorFormaPago: Array.from(porFormaPago, ([formaPago, totales]) => ({
+      formaPago,
+      cantidadCobros: totales.cantidadCobros,
+      totalCobrado: totales.centavos / 100,
+    })).sort((a, b) => a.formaPago.localeCompare(b.formaPago)),
+  };
 }
 
 function normalizarFormaPago(formaPago) {
@@ -354,6 +423,7 @@ async function registrarCobro(dto) {
 }
 
 module.exports = {
+  listarCobrosDelDia,
   listarResumen,
   obtenerCuentaCorriente,
   registrarCobro,

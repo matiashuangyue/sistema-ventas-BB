@@ -31,6 +31,16 @@ router.get("/clientes/:clienteId/cuenta-corriente", async (req, res) => {
   }
 });
 
+router.get("/cobros", async (req, res) => {
+  try {
+    const listado = await cobranzasService.listarCobrosDelDia(req.query.fecha);
+    res.set("Cache-Control", "no-store");
+    res.json(listado);
+  } catch (error) {
+    handleControllerError(res, error, "Error obteniendo cobranzas del dia");
+  }
+});
+
 router.post("/cobros", async (req, res) => {
   try {
     const dto = CrearCobroDto.from(req.body);
