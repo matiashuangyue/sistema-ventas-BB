@@ -45,9 +45,16 @@ test("un PDF de varias páginas conserva todos los cobros y numera cada página"
   }
   for (let pagina = 1; pagina <= paginas; pagina += 1) {
     assert.ok(contenido.includes(`Página ${pagina} de ${paginas}`));
+    const contenidoPagina = doc.internal.pages[pagina].join("\n");
+    if (/CLIENTE-\d{4}/.test(contenidoPagina)) {
+      assert.ok(contenidoPagina.includes("(Cliente)"), `Falta el encabezado en la página ${pagina}`);
+    } else {
+      // El resumen se mantiene completo cuando necesita una página propia.
+      assert.ok(contenidoPagina.includes("Totales por forma de pago"));
+      assert.ok(contenidoPagina.includes("Total cobrado"));
+    }
   }
   assert.ok(contenido.includes("($ 154.312,50)"));
-  assert.equal((contenido.match(/\(Cliente\)/g) || []).length, paginas);
 });
 
 test("el PDF admite cobros sin cliente ni venta y envuelve observaciones largas", () => {
