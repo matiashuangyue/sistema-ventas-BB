@@ -141,8 +141,9 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
   const [observacionesCobro, setObservacionesCobro] = useState("");
   const [registrandoCobro, setRegistrandoCobro] = useState(false);
   const [fechaListado, setFechaListado] = useState(() => obtenerFechaActualCobros());
-  const [preparandoListado, setPreparandoListado] = useState(false);
+  const [accionListado, setAccionListado] = useState(null);
   const [avisoListado, setAvisoListado] = useState(null);
+  const preparandoListado = accionListado !== null;
 
   useEffect(() => {
     let cancelado = false;
@@ -277,19 +278,19 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
     }));
   }
 
-  async function imprimirCobranzasDelDia() {
+  async function generarListadoCobranzas(accion = "imprimir") {
     if (preparandoListado || registrandoCobro) return;
     if (!fechaListado) {
-      setAvisoListado({ error: true, texto: "Elegí una fecha para imprimir las cobranzas." });
+      setAvisoListado({ error: true, texto: "Elegí una fecha para generar el listado de cobranzas." });
       return;
     }
 
     let ventana;
     setAvisoListado(null);
-    setPreparandoListado(true);
+    setAccionListado(accion);
 
     try {
-      ventana = abrirVentanaCobros(fechaListado);
+      if (accion === "imprimir") ventana = abrirVentanaCobros(fechaListado);
       const params = new URLSearchParams({ fecha: fechaListado });
       const res = await fetch(`${API}/cobranzas/cobros?${params}`, { cache: "no-store" });
       const reporte = await res.json();
@@ -299,7 +300,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
       }
 
       if (reporte.items.length === 0) {
-        ventana.close();
+        ventana?.close();
         setAvisoListado({
           error: false,
           texto: `No hay cobranzas registradas el ${formatearDiaCobros(reporte.fecha)}.`,
@@ -307,11 +308,20 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
         return;
       }
 
-      imprimirCobrosDiarios(ventana, reporte);
-      setAvisoListado({
-        error: false,
-        texto: `Listado del ${formatearDiaCobros(reporte.fecha)} listo para imprimir.`,
-      });
+      if (accion === "pdf") {
+        const { descargarPdfCobrosDiarios } = await import("./pdfCobrosDiarios");
+        await descargarPdfCobrosDiarios(reporte);
+        setAvisoListado({
+          error: false,
+          texto: `Descarga del PDF de cobranzas del ${formatearDiaCobros(reporte.fecha)} iniciada.`,
+        });
+      } else {
+        imprimirCobrosDiarios(ventana, reporte);
+        setAvisoListado({
+          error: false,
+          texto: `Listado del ${formatearDiaCobros(reporte.fecha)} listo para imprimir.`,
+        });
+      }
     } catch (error) {
       if (ventana && !ventana.closed) ventana.close();
       setAvisoListado({
@@ -319,7 +329,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
         texto: error.message || "No se pudo preparar el listado de cobranzas.",
       });
     } finally {
-      setPreparandoListado(false);
+      setAccionListado(null);
     }
   }
 
@@ -389,7 +399,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
             style={styles.listadoActions}
             onSubmit={(event) => {
               event.preventDefault();
-              imprimirCobranzasDelDia();
+              generarListadoCobranzas(event.nativeEvent.submitter?.value === "pdf" ? "pdf" : "imprimir");
             }}
           >
             <div>
@@ -426,9 +436,20 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
               style={styles.btnPrincipal}
               disabled={preparandoListado || registrandoCobro || !fechaListado}
               type="submit"
+              value="imprimir"
             >
-              <LoadingContent loading={preparandoListado} loadingText="Preparando listado...">
+              <LoadingContent loading={accionListado === "imprimir"} loadingText="Preparando listado...">
                 Imprimir cobranzas
+              </LoadingContent>
+            </button>
+            <button
+              style={styles.btnSecundario}
+              disabled={preparandoListado || registrandoCobro || !fechaListado}
+              type="submit"
+              value="pdf"
+            >
+              <LoadingContent loading={accionListado === "pdf"} loadingText="Generando PDF...">
+                Descargar PDF
               </LoadingContent>
             </button>
           </form>

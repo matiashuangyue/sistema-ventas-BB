@@ -18,14 +18,14 @@ function escaparHtml(valor) {
   })[caracter]);
 }
 
-function moneda(valor) {
+export function formatearMonedaCobro(valor) {
   return `$ ${Number(valor).toLocaleString("es-AR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
 
-function formaPago(valor) {
+export function formatearFormaPagoCobro(valor) {
   return FORMAS_PAGO[valor] || valor || "Sin especificar";
 }
 
@@ -44,36 +44,44 @@ export function obtenerFechaActualCobros(ahora = new Date()) {
   return `${valores.year}-${valores.month}-${valores.day}`;
 }
 
-export function crearHtmlCobrosDiarios(reporte) {
-  const fecha = escaparHtml(formatearDiaCobros(reporte.fecha));
-  const generado = escaparHtml(new Date().toLocaleString("es-AR", {
+export function formatearGeneracionCobros(ahora = new Date()) {
+  return ahora.toLocaleString("es-AR", {
     timeZone: ZONA_HORARIA,
     dateStyle: "short",
     timeStyle: "short",
-  }));
+  });
+}
+
+export function formatearHoraCobro(fecha) {
+  return new Date(fecha).toLocaleTimeString("es-AR", {
+    timeZone: ZONA_HORARIA,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+}
+
+export function crearHtmlCobrosDiarios(reporte) {
+  const fecha = escaparHtml(formatearDiaCobros(reporte.fecha));
+  const generado = escaparHtml(formatearGeneracionCobros());
   const filas = reporte.items.map((cobro) => {
-    const hora = new Date(cobro.fecha).toLocaleTimeString("es-AR", {
-      timeZone: ZONA_HORARIA,
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    });
+    const hora = formatearHoraCobro(cobro.fecha);
 
     return `<tr>
       <td>#${escaparHtml(cobro.id)}</td>
       <td>${escaparHtml(hora)}</td>
       <td>${escaparHtml(cobro.cliente?.nombre || "Sin cliente")}</td>
       <td>${cobro.ventaId == null ? "—" : `#${escaparHtml(cobro.ventaId)}`}</td>
-      <td>${escaparHtml(formaPago(cobro.formaPago))}</td>
+      <td>${escaparHtml(formatearFormaPagoCobro(cobro.formaPago))}</td>
       <td class="observaciones">${escaparHtml(cobro.observaciones || "—")}</td>
-      <td class="importe">${escaparHtml(moneda(cobro.monto))}</td>
+      <td class="importe">${escaparHtml(formatearMonedaCobro(cobro.monto))}</td>
     </tr>`;
   }).join("");
 
   const resumen = reporte.totalesPorFormaPago.map((grupo) => `<tr>
-    <td>${escaparHtml(formaPago(grupo.formaPago))}</td>
+    <td>${escaparHtml(formatearFormaPagoCobro(grupo.formaPago))}</td>
     <td class="cantidad">${escaparHtml(grupo.cantidadCobros)}</td>
-    <td class="importe">${escaparHtml(moneda(grupo.totalCobrado))}</td>
+    <td class="importe">${escaparHtml(formatearMonedaCobro(grupo.totalCobrado))}</td>
   </tr>`).join("");
 
   return `<!doctype html>
@@ -139,7 +147,7 @@ export function crearHtmlCobrosDiarios(reporte) {
       <thead><tr><th>Forma de pago</th><th class="cantidad">Cobros</th><th class="importe">Total</th></tr></thead>
       <tbody>${resumen}</tbody>
     </table>
-    <div class="total"><span>Total cobrado</span><span>${escaparHtml(moneda(reporte.totalCobrado))}</span></div>
+    <div class="total"><span>Total cobrado</span><span>${escaparHtml(formatearMonedaCobro(reporte.totalCobrado))}</span></div>
   </section>
 </body>
 </html>`;
