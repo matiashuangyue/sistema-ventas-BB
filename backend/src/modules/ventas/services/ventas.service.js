@@ -301,6 +301,11 @@ async function crearVenta(dto) {
 
   const ventaFinal = await ventasRepository.transaction(
     async (tx) => {
+      // Los cobros generales bloquean primero al cliente y luego sus ventas.
+      // El alta debe esperar ese bloqueo para no aparecer a mitad de un cobro.
+      if (dto.clienteId) {
+        await ventasRepository.lockCliente(tx, dto.clienteId);
+      }
       let subtotal = 0;
 
       const nuevaVenta = await ventasRepository.createVenta(tx, {
@@ -398,7 +403,7 @@ async function crearVenta(dto) {
       }
 
       const total = redondearMonto(subtotal - dto.descuento);
-      const formaPago = normalizarFormaPago(dto.formaPago);
+      const formaPago = normalizarFormaPago(dto.formaPago || "CUENTA_CORRIENTE");
       const montoPagado = calcularPagoInicial(dto, total, formaPago);
       const saldoPendiente = redondearMonto(total - montoPagado);
       const estadoPago = calcularEstadoPago(total, montoPagado);

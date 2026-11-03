@@ -1,0 +1,44 @@
+.dialogo {
+  width: min(460px, calc(100vw - 32px));
+  max-height: 88vh;
+  box-sizing: border-box;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.dialogo::backdrop { background: rgba(15, 23, 42, 0.46); }
+.formulario { display: flex; flex-direction: column; gap: 14px; }
+.formulario h3, .formulario p { margin: 0; }
+.ayuda { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.formulario label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.formulario input, .formulario select, .formulario textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.formulario textarea { resize: vertical; }
+.formulario button {
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.formulario button:disabled { opacity: 0.65; cursor: wait; }
+.formulario .primario { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
+.resumen { display: grid; gap: 8px; padding: 12px; border-radius: 10px; background: var(--surface-soft); }
+.resumen div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.error { color: var(--danger); font-size: 13px; line-height: 1.5; }
+.acciones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }

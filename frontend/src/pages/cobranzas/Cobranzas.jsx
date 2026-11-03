@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { API_URL as API } from "../../config/api";
 import LoadingContent from "../../components/LoadingContent";
+import MovimientoCuentaDialog from "./MovimientoCuentaDialog";
 import {
   abrirVentanaCobros,
   formatearDiaCobros,
@@ -15,13 +16,6 @@ const TOTALES_INICIALES = {
   clientesConSaldo: 0,
   ventasPendientes: 0,
 };
-
-const FORMAS_COBRO = [
-  { value: "EFECTIVO", label: "Efectivo" },
-  { value: "TRANSFERENCIA", label: "Transferencia" },
-  { value: "TARJETA", label: "Tarjeta" },
-  { value: "OTRO", label: "Otro" },
-];
 
 function formatearFecha(fechaIso) {
   if (!fechaIso) return "-";
@@ -48,7 +42,11 @@ function formatearFormaPago(formaPago) {
     OTRO: "Otro",
   };
 
-  return labels[formaPago] || "Efectivo";
+  return labels[formaPago] || formaPago || "";
+}
+
+function formatearSaldo(valor) {
+  return valor < 0 ? `${formatearMoneda(Math.abs(valor))} a favor` : formatearMoneda(valor);
 }
 
 function calcularTotales(clientes) {
@@ -135,11 +133,10 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
   const [soloConDeuda, setSoloConDeuda] = useState(false);
   const [ventasDetalleAbiertas, setVentasDetalleAbiertas] = useState({});
 
-  const [ventaCobro, setVentaCobro] = useState(null);
-  const [montoCobro, setMontoCobro] = useState("");
-  const [formaCobro, setFormaCobro] = useState("EFECTIVO");
-  const [observacionesCobro, setObservacionesCobro] = useState("");
-  const [registrandoCobro, setRegistrandoCobro] = useState(false);
+  const [operacionCuenta, setOperacionCuenta] = useState(null);
+  const [revisionResumen, setRevisionResumen] = useState(0);
+  const [avisoCuenta, setAvisoCuenta] = useState("");
+  const operacionAbierta = operacionCuenta !== null;
   const [fechaListado, setFechaListado] = useState(() => obtenerFechaActualCobros());
   const [accionListado, setAccionListado] = useState(null);
   const [avisoListado, setAvisoListado] = useState(null);
@@ -183,7 +180,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
       cancelado = true;
       clearTimeout(timeout);
     };
-  }, [busqueda, paginaClientes, soloConDeuda]);
+  }, [busqueda, paginaClientes, soloConDeuda, revisionResumen]);
 
   useEffect(() => {
     if (!solicitudCuenta) return;
@@ -227,29 +224,22 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
     setErrorCuenta("");
     setCuenta(null);
     setVentasDetalleAbiertas({});
+    setAvisoCuenta("");
     setSolicitudCuenta({ clienteId });
   }
 
-  function abrirCobro(venta) {
-    setVentaCobro(venta);
-    setMontoCobro(String(venta.saldoPendiente));
-    setFormaCobro("EFECTIVO");
-    setObservacionesCobro("");
+  function abrirCobro(venta = null) {
+    setOperacionCuenta({ tipo: "cobro", venta });
   }
 
-  function cerrarCobro() {
-    setVentaCobro(null);
-    setMontoCobro("");
-    setFormaCobro("EFECTIVO");
-    setObservacionesCobro("");
-  }
-
-  function aplicarResumen(respuesta) {
-    setClientes(respuesta.items);
-    setPaginaClientes(respuesta.page);
-    setTotalClientes(respuesta.total);
-    setTotalPaginasClientes(respuesta.totalPages);
-    setTotales(respuesta.totales);
+  function movimientoGuardado(data, mensaje) {
+    setCuenta(data);
+    setOperacionCuenta(null);
+    setAvisoCuenta(mensaje);
+    setAvisoListado(null);
+    // El movimiento ya quedó guardado. Una falla al recargar el listado no
+    // debe dejar el formulario abierto y permitir registrar el mismo otra vez.
+    setRevisionResumen((actual) => actual + 1);
   }
 
   function cambiarPaginaClientes(nuevaPagina) {
@@ -279,7 +269,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
   }
 
   async function generarListadoCobranzas(accion = "imprimir") {
-    if (preparandoListado || registrandoCobro) return;
+    if (preparandoListado || operacionAbierta) return;
     if (!fechaListado) {
       setAvisoListado({ error: true, texto: "Elegí una fecha para generar el listado de cobranzas." });
       return;
@@ -333,63 +323,6 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
     }
   }
 
-  async function registrarCobro() {
-    if (!ventaCobro) return;
-
-    const monto = Number(montoCobro);
-
-    if (!Number.isFinite(monto) || monto <= 0) {
-      alert("El monto debe ser mayor a 0");
-      return;
-    }
-
-    if (monto > ventaCobro.saldoPendiente) {
-      alert("El monto no puede superar el saldo pendiente");
-      return;
-    }
-
-    try {
-      setRegistrandoCobro(true);
-
-      const res = await fetch(`${API}/cobranzas/cobros`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ventaId: ventaCobro.id,
-          monto,
-          formaPago: formaCobro,
-          observaciones: observacionesCobro.trim(),
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Error registrando cobro");
-      }
-
-      setCuenta(data);
-      setAvisoListado(null);
-      const resumen = await obtenerResumenCobranzas({
-        cliente: busqueda,
-        page: paginaClientes,
-        soloConDeuda,
-      });
-      aplicarResumen(
-        normalizarRespuestaResumen(
-          resumen,
-          paginaClientes,
-          COBRANZAS_PAGE_SIZE,
-        ),
-      );
-      cerrarCobro();
-    } catch (error) {
-      console.error(error);
-      alert(error.message);
-    } finally {
-      setRegistrandoCobro(false);
-    }
-  }
-
   return (
     <div style={styles.container}>
       <div style={styles.header}>
@@ -414,7 +347,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
                 max="9999-12-31"
                 required
                 value={fechaListado}
-                disabled={preparandoListado || registrandoCobro}
+                disabled={preparandoListado || operacionAbierta}
                 onChange={(event) => {
                   setFechaListado(event.target.value);
                   setAvisoListado(null);
@@ -423,7 +356,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
             </div>
             <button
               style={styles.btnSecundario}
-              disabled={preparandoListado || registrandoCobro}
+              disabled={preparandoListado || operacionAbierta}
               type="button"
               onClick={() => {
                 setFechaListado(obtenerFechaActualCobros());
@@ -434,7 +367,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
             </button>
             <button
               style={styles.btnPrincipal}
-              disabled={preparandoListado || registrandoCobro || !fechaListado}
+              disabled={preparandoListado || operacionAbierta || !fechaListado}
               type="submit"
               value="imprimir"
             >
@@ -444,7 +377,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
             </button>
             <button
               style={styles.btnSecundario}
-              disabled={preparandoListado || registrandoCobro || !fechaListado}
+              disabled={preparandoListado || operacionAbierta || !fechaListado}
               type="submit"
               value="pdf"
             >
@@ -457,7 +390,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
             <button
               style={styles.btnSecundario}
               onClick={onVolverVenta}
-              disabled={registrandoCobro}
+              disabled={operacionAbierta}
               type="button"
             >
               Volver a la venta
@@ -490,10 +423,11 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
 
       <div style={styles.metricasGrid}>
         <div style={styles.metrica}>
-          <span style={styles.metricaLabel}>Saldo pendiente</span>
+          <span style={styles.metricaLabel}>Saldo neto</span>
           <strong style={styles.metricaValor}>
-            {formatearMoneda(totales.saldoPendiente)}
+            {formatearSaldo(totales.saldoPendiente)}
           </strong>
+          <span style={styles.detalleMuted}>Deudas menos saldos a favor</span>
         </div>
         <button
           style={{
@@ -562,7 +496,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
                         : styles.saldoCero
                     }
                   >
-                    {formatearMoneda(cliente.saldoPendiente)}
+                    {formatearSaldo(cliente.saldoPendiente)}
                   </span>
                 </div>
                 <div style={styles.clienteLinea2}>
@@ -635,10 +569,34 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
                     {cuenta.cliente.telefono || cuenta.cliente.localidad || "-"}
                   </div>
                 </div>
-                <div style={styles.detalleSaldo}>
-                  {formatearMoneda(cuenta.resumen.saldoPendiente)}
+                <div style={{ ...styles.detalleSaldo, ...(cuenta.resumen.saldoPendiente <= 0 ? styles.saldoCero : {}) }}>
+                  <div style={styles.detalleMuted}>
+                    {cuenta.resumen.saldoPendiente < 0 ? "Saldo a favor" : "Saldo pendiente"}
+                  </div>
+                  {formatearMoneda(Math.abs(cuenta.resumen.saldoPendiente))}
                 </div>
               </div>
+
+              <div style={styles.headerActions}>
+                <button
+                  style={styles.btnPrincipal}
+                  type="button"
+                  disabled={operacionAbierta || cuenta.resumen.saldoPendiente <= 0}
+                  onClick={() => abrirCobro()}
+                >
+                  Registrar cobro
+                </button>
+                <button
+                  style={styles.btnSecundario}
+                  type="button"
+                  disabled={operacionAbierta}
+                  onClick={() => setOperacionCuenta({ tipo: "ajuste" })}
+                >
+                  Ajustar saldo
+                </button>
+              </div>
+
+              {avisoCuenta && <div style={styles.emptyInterno} role="status">{avisoCuenta}</div>}
 
               <div style={styles.resumenGrid}>
                 <div style={styles.resumenBox}>
@@ -650,13 +608,20 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
                   <strong>{formatearMoneda(cuenta.resumen.totalCobrado)}</strong>
                 </div>
                 <div style={styles.resumenBox}>
+                  <span>Ajustes netos</span>
+                  <strong>{formatearMoneda(cuenta.resumen.totalAjustes || 0)}</strong>
+                </div>
+                <div style={styles.resumenBox}>
                   <span>Pendientes</span>
                   <strong>{cuenta.resumen.ventasPendientes}</strong>
                 </div>
               </div>
 
               <div style={styles.seccionDetalle}>
-                <h4 style={styles.subTitle}>Ventas pendientes</h4>
+                <h4 style={styles.subTitle}>Ventas con saldo pendiente</h4>
+                <div style={styles.detalleMuted}>
+                  Estos saldos corresponden a cada venta. El saldo de la cuenta también incluye los ajustes manuales.
+                </div>
 
                 {cuenta.ventasPendientes.length === 0 && (
                   <div style={styles.emptyInterno}>No hay ventas pendientes.</div>
@@ -693,6 +658,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
                         <button
                           style={styles.btnPrincipal}
                           onClick={() => abrirCobro(venta)}
+                          disabled={operacionAbierta || cuenta.resumen.saldoPendiente <= 0}
                           type="button"
                         >
                           Cobrar
@@ -753,9 +719,16 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
                     <div>
                       <strong>{movimiento.concepto}</strong>
                       <div style={styles.detalleMuted}>
-                        {formatearFecha(movimiento.fecha)} -{" "}
-                        {formatearFormaPago(movimiento.formaPago)}
+                        {formatearFecha(movimiento.fecha)}
+                        {movimiento.ajusteId ? " · Ajuste manual" : ""}
+                        {movimiento.formaPago ? ` · ${formatearFormaPago(movimiento.formaPago)}` : ""}
                       </div>
+                      {movimiento.observaciones && (
+                        <div style={styles.movimientoObservaciones}>{movimiento.observaciones}</div>
+                      )}
+                      {movimiento.ajusteId && movimiento.usuario?.nombre && (
+                        <div style={styles.detalleMuted}>Registrado por {movimiento.usuario.nombre}</div>
+                      )}
                     </div>
                     <div style={styles.movimientoNumeros}>
                       <span
@@ -768,7 +741,7 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
                         {movimiento.tipo === "DEBITO" ? "+" : "-"}
                         {formatearMoneda(movimiento.monto)}
                       </span>
-                      <strong>{formatearMoneda(movimiento.saldo)}</strong>
+                      <strong>{formatearSaldo(movimiento.saldo)}</strong>
                     </div>
                   </div>
                 ))}
@@ -778,74 +751,14 @@ export default function Cobranzas({ clienteInicialId = null, onVolverVenta }) {
         </section>
       </div>
 
-      {ventaCobro && (
-        <>
-          <div style={styles.overlay} onClick={cerrarCobro}></div>
-          <div style={styles.modal}>
-            <h3 style={styles.modalTitle}>Registrar cobro</h3>
-            <div style={styles.detalleMuted}>
-              Venta #{ventaCobro.id} - saldo{" "}
-              {formatearMoneda(ventaCobro.saldoPendiente)}
-            </div>
-
-            <label style={styles.label}>Monto</label>
-            <input
-              type="number"
-              min="0"
-              max={ventaCobro.saldoPendiente}
-              style={styles.input}
-              value={montoCobro}
-              disabled={registrandoCobro}
-              onChange={(e) => setMontoCobro(e.target.value)}
-            />
-
-            <label style={styles.label}>Forma de pago</label>
-            <select
-              style={styles.input}
-              value={formaCobro}
-              disabled={registrandoCobro}
-              onChange={(e) => setFormaCobro(e.target.value)}
-            >
-              {FORMAS_COBRO.map((forma) => (
-                <option key={forma.value} value={forma.value}>
-                  {forma.label}
-                </option>
-              ))}
-            </select>
-
-            <textarea
-              style={styles.textarea}
-              placeholder="Observaciones (opcional)"
-              value={observacionesCobro}
-              disabled={registrandoCobro}
-              onChange={(e) => setObservacionesCobro(e.target.value)}
-            />
-
-            <div style={styles.modalActions}>
-              <button
-                style={styles.btnSecundario}
-                onClick={cerrarCobro}
-                disabled={registrandoCobro}
-                type="button"
-              >
-                Cancelar
-              </button>
-              <button
-                style={styles.btnPrincipal}
-                onClick={registrarCobro}
-                disabled={registrandoCobro}
-                type="button"
-              >
-                <LoadingContent
-                  loading={registrandoCobro}
-                  loadingText="Guardando..."
-                >
-                  Guardar cobro
-                </LoadingContent>
-              </button>
-            </div>
-          </div>
-        </>
+      {operacionCuenta && cuenta && (
+        <MovimientoCuentaDialog
+          key={`${cuenta.cliente.id}-${operacionCuenta.tipo}-${operacionCuenta.venta?.id || "general"}`}
+          cuenta={cuenta}
+          operacion={operacionCuenta}
+          onCerrar={() => setOperacionCuenta(null)}
+          onGuardado={movimientoGuardado}
+        />
       )}
     </div>
   );
@@ -1086,6 +999,13 @@ const styles = {
     gap: 3,
     fontSize: 13,
   },
+  movimientoObservaciones: {
+    color: "var(--text-soft)",
+    fontSize: 13,
+    marginTop: 4,
+    overflowWrap: "anywhere",
+    whiteSpace: "pre-wrap",
+  },
   debito: { color: "var(--danger)", fontWeight: 700 },
   credito: { color: "var(--success)", fontWeight: 700 },
   btnPrincipal: {
@@ -1103,35 +1023,5 @@ const styles = {
     color: "var(--text)",
     padding: "10px 14px",
     fontWeight: 600,
-  },
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(15, 23, 42, 0.46)",
-    zIndex: 999,
-  },
-  modal: {
-    position: "fixed",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    width: "92%",
-    maxWidth: 430,
-    maxHeight: "88vh",
-    overflowY: "auto",
-    background: "var(--surface)",
-    borderRadius: 14,
-    padding: 18,
-    zIndex: 1000,
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  },
-  modalTitle: { margin: 0 },
-  modalActions: {
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: 8,
-    flexWrap: "wrap",
   },
 };

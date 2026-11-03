@@ -1,7 +1,9 @@
 const express = require("express");
 
+const authMiddleware = require("../../../middlewares/auth.middleware");
 const handleControllerError = require("../../../shared/http/handle-controller-error");
 const CrearCobroDto = require("../models/dtos/crear-cobro.dto");
+const CrearAjusteCuentaDto = require("../models/dtos/crear-ajuste-cuenta.dto");
 const cobranzasService = require("../services/cobranzas.service");
 
 const router = express.Router();
@@ -28,6 +30,26 @@ router.get("/clientes/:clienteId/cuenta-corriente", async (req, res) => {
     res.json(cuenta);
   } catch (error) {
     handleControllerError(res, error, "Error obteniendo cuenta corriente");
+  }
+});
+
+router.post("/clientes/:clienteId/ajustes", authMiddleware, async (req, res) => {
+  try {
+    const dto = CrearAjusteCuentaDto.from(req.body);
+    const cuenta = await cobranzasService.registrarAjuste(req.params.clienteId, dto, req.user.id);
+    res.json(cuenta);
+  } catch (error) {
+    handleControllerError(res, error, "Error registrando ajuste de cuenta corriente");
+  }
+});
+
+router.post("/clientes/:clienteId/cobros", authMiddleware, async (req, res) => {
+  try {
+    const dto = CrearCobroDto.from(req.body);
+    const cuenta = await cobranzasService.registrarCobroCliente(req.params.clienteId, dto);
+    res.json(cuenta);
+  } catch (error) {
+    handleControllerError(res, error, "Error registrando cobro de cuenta corriente");
   }
 });
 

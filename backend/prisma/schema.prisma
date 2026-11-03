@@ -17,6 +17,8 @@ model Usuario {
   rol       String
   activo    Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  ajustesCuenta AjusteCuentaCorriente[]
 }
 
 model Cliente {
@@ -32,6 +34,7 @@ model Cliente {
 
   ventas Venta[]
   cobros Cobro[]
+  ajustesCuenta AjusteCuentaCorriente[]
 }
 
 model Producto {
@@ -93,7 +96,7 @@ model Venta {
   subtotal          Float
   descuento         Float
   total             Float
-  formaPago         String   @default("EFECTIVO")
+  formaPago         String   @default("CUENTA_CORRIENTE")
   montoPagado       Float    @default(0)
   saldoPendiente    Float    @default(0)
   estadoPago        String   @default("PAGADA")
@@ -155,4 +158,21 @@ model Cobro {
 
   @@index([clienteId])
   @@index([ventaId])
+}
+
+model AjusteCuentaCorriente {
+  id        Int      @id @default(autoincrement())
+  clienteId Int
+  fecha     DateTime @default(now())
+  // Positivo aumenta la deuda; negativo la reduce o deja saldo a favor.
+  monto     Float
+  motivo    String
+  usuarioId Int?
+  createdAt DateTime @default(now())
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([clienteId, fecha])
+  @@index([usuarioId])
 }

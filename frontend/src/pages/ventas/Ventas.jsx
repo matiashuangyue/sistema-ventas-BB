@@ -13,7 +13,7 @@ const BORRADOR_INICIAL = {
   cantidadesBusqueda: {},
   clienteBusqueda: "",
   clienteSeleccionado: null,
-  formaPago: "EFECTIVO",
+  formaPago: "CUENTA_CORRIENTE",
   montoPagado: "",
   montoPagadoManual: false,
   observacionesPago: "",
@@ -56,7 +56,7 @@ function ventaTieneDatos(borrador) {
     Boolean(String(borrador.clienteBusqueda || "").trim()) ||
     Boolean(borrador.clienteSeleccionado) ||
     Number(borrador.descuento || 0) > 0 ||
-    String(borrador.formaPago || "EFECTIVO") !== "EFECTIVO" ||
+    String(borrador.formaPago || BORRADOR_INICIAL.formaPago) !== BORRADOR_INICIAL.formaPago ||
     Boolean(borrador.montoPagadoManual) ||
     Boolean(String(borrador.observacionesPago || "").trim())
   );
@@ -303,7 +303,7 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
     setClienteSeleccionado(null);
     setClienteDeudaConsultadaId(null);
     setClientesEncontrados([]);
-    setFormaPago("EFECTIVO");
+    setFormaPago(BORRADOR_INICIAL.formaPago);
     setMontoPagado("");
     setMontoPagadoManual(false);
     setObservacionesPago("");
@@ -1056,6 +1056,13 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
             />
           </div>
         </div>
+
+        {formaPago === "CUENTA_CORRIENTE" && (
+          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
+            Seleccioná un cliente. La venta quedará pendiente en su cuenta corriente
+            y podrás registrar el cobro cuando pague.
+          </p>
+        )}
 
         <textarea
           style={styles.textarea}

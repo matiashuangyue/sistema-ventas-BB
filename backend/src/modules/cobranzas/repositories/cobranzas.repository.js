@@ -21,15 +21,25 @@ const ventaConCuentaInclude = {
 };
 
 function transaction(callback) {
-  return prisma.$transaction(callback);
+  return prisma.$transaction(callback, { timeout: 30000 });
 }
 
-function lockVenta(client, ventaId) {
-  return client.$queryRaw`SELECT "id" FROM "Venta" WHERE "id" = ${ventaId} FOR UPDATE`;
+function lockCliente(client, clienteId) {
+  // Serializa movimientos de cuenta sin bloquear las referencias FK al cliente
+  // que crean las ventas y sus correcciones mientras tienen su propia fila bloqueada.
+  return client.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${clienteId} FOR NO KEY UPDATE`;
+}
+
+function lockVentasCliente(client, clienteId) {
+  return client.$queryRaw`SELECT "id" FROM "Venta" WHERE "clienteId" = ${clienteId} ORDER BY "id" FOR UPDATE`;
 }
 
 function createCobro(client, data) {
   return client.cobro.create({ data });
+}
+
+function createAjuste(client, data) {
+  return client.ajusteCuentaCorriente.create({ data });
 }
 
 function findCobrosEntreFechas(desde, hasta) {
@@ -49,10 +59,18 @@ function findCobrosEntreFechas(desde, hasta) {
   });
 }
 
-function findClienteConCuenta(clienteId) {
-  return prisma.cliente.findUnique({
+function findClienteConCuenta(clienteId, client = prisma) {
+  return client.cliente.findUnique({
     where: { id: clienteId },
     include: {
+      ajustesCuenta: {
+        orderBy: [{ fecha: "asc" }, { id: "asc" }],
+        include: { usuario: { select: { id: true, nombre: true } } },
+      },
+      cobros: {
+        where: { ventaId: null },
+        orderBy: [{ fecha: "asc" }, { id: "asc" }],
+      },
       ventas: {
         orderBy: [{ fecha: "asc" }, { id: "asc" }],
         include: ventaConCuentaInclude,
@@ -80,6 +98,8 @@ function findClientesConCuenta(filtroCliente) {
       nombre: "asc",
     },
     include: {
+      ajustesCuenta: { select: { monto: true } },
+      cobros: { where: { ventaId: null }, select: { monto: true } },
       ventas: {
         orderBy: [{ fecha: "desc" }, { id: "desc" }],
       },
@@ -104,8 +124,10 @@ function updateVentaPago(client, ventaId, data) {
 }
 
 module.exports = {
-  lockVenta,
+  lockCliente,
+  lockVentasCliente,
   createCobro,
+  createAjuste,
   findCobrosEntreFechas,
   findClienteConCuenta,
   findClientesConCuenta,

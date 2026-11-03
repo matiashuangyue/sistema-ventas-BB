@@ -27,6 +27,10 @@ function lockVenta(client, id) {
   return client.$queryRaw`SELECT "id" FROM "Venta" WHERE "id" = ${id} FOR UPDATE`;
 }
 
+function lockCliente(client, clienteId) {
+  return client.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${clienteId} FOR NO KEY UPDATE`;
+}
+
 function findVarianteForEdit(client, id) {
   return client.variante.findUnique({ where: { id }, include: { producto: true } });
 }
@@ -212,6 +216,7 @@ module.exports = {
   findVentasHistorial,
   findVentasHistorialPage,
   transaction,
+  lockCliente,
   lockVenta,
   updateStockVariantesByDeltas,
   updateStockVariante,

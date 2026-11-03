@@ -33,7 +33,7 @@ export default function AvisoDeudaCliente({
         }
 
         const saldo = data?.resumen?.saldoPendiente;
-        if (typeof saldo !== "number" || !Number.isFinite(saldo) || saldo < 0) {
+        if (typeof saldo !== "number" || !Number.isFinite(saldo)) {
           throw new Error("No se pudo consultar la deuda del cliente.");
         }
 
