@@ -1,6 +1,6 @@
 const express = require("express");
 
-const authMiddleware = require("../../../middlewares/auth.middleware");
+const optionalAuthMiddleware = require("../../../middlewares/optional-auth.middleware");
 const handleControllerError = require("../../../shared/http/handle-controller-error");
 const CrearCobroDto = require("../models/dtos/crear-cobro.dto");
 const CrearAjusteCuentaDto = require("../models/dtos/crear-ajuste-cuenta.dto");
@@ -33,17 +33,17 @@ router.get("/clientes/:clienteId/cuenta-corriente", async (req, res) => {
   }
 });
 
-router.post("/clientes/:clienteId/ajustes", authMiddleware, async (req, res) => {
+router.post("/clientes/:clienteId/ajustes", optionalAuthMiddleware, async (req, res) => {
   try {
     const dto = CrearAjusteCuentaDto.from(req.body);
-    const cuenta = await cobranzasService.registrarAjuste(req.params.clienteId, dto, req.user.id);
+    const cuenta = await cobranzasService.registrarAjuste(req.params.clienteId, dto, req.user?.id);
     res.json(cuenta);
   } catch (error) {
     handleControllerError(res, error, "Error registrando ajuste de cuenta corriente");
   }
 });
 
-router.post("/clientes/:clienteId/cobros", authMiddleware, async (req, res) => {
+router.post("/clientes/:clienteId/cobros", async (req, res) => {
   try {
     const dto = CrearCobroDto.from(req.body);
     const cuenta = await cobranzasService.registrarCobroCliente(req.params.clienteId, dto);

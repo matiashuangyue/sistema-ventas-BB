@@ -1,5 +1,10 @@
 const assert = require("node:assert/strict");
+const { once } = require("node:events");
 const { beforeEach, test } = require("node:test");
+const express = require("express");
+const jwt = require("jsonwebtoken");
+
+process.env.JWT_SECRET = "clave-local-pruebas-cobranzas";
 
 // Se ejecutan los servicios y repositorios reales sobre un doble transaccional,
 // sin abrir la base configurada en el entorno.
@@ -93,6 +98,8 @@ const prismaPath = require.resolve("../src/lib/prisma");
 require.cache[prismaPath] = { id: prismaPath, filename: prismaPath, loaded: true, exports: prismaDoble };
 const service = require("../src/modules/cobranzas/services/cobranzas.service");
 const router = require("../src/modules/cobranzas/controllers/cobranzas.controller");
+const authRouter = require("../src/modules/auth/controllers/auth.controller");
+const env = require("../src/config/env");
 const CrearCobroDto = require("../src/modules/cobranzas/models/dtos/crear-cobro.dto");
 const CrearAjusteCuentaDto = require("../src/modules/cobranzas/models/dtos/crear-ajuste-cuenta.dto");
 
@@ -256,34 +263,89 @@ test("rechaza clientes y ventas inexistentes sin generar movimientos", async () 
   assert.deepEqual(estado, anterior);
 });
 
-function respuesta() {
-  return {
-    statusCode: 200,
-    status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; },
+async function clienteHttp(t) {
+  const app = express();
+  app.use(express.json());
+  app.use("/cobranzas", router);
+  app.use("/auth", authRouter);
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  }));
+  const origen = `http://127.0.0.1:${server.address().port}`;
+  return async (ruta, body, authorization) => {
+    const res = await fetch(`${origen}${ruta}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    return { status: res.status, body: await res.json() };
   };
 }
 
-test("los endpoints nuevos requieren autenticacion y el autor viene de la sesion", async () => {
-  const ajuste = router.stack.find((item) => item.route?.path === "/clientes/:clienteId/ajustes").route;
-  const cobro = router.stack.find((item) => item.route?.path === "/clientes/:clienteId/cobros").route;
-  for (const ruta of [ajuste, cobro]) {
-    const res = respuesta();
-    ruta.stack[0].handle({ headers: {} }, res, () => assert.fail("Sin token no se permite mutar"));
-    assert.equal(res.statusCode, 401);
+const tokenVencido = jwt.sign({ id: 9, rol: "admin" }, env.jwtSecret, { expiresIn: -60 });
+const tokenOperador = jwt.sign({ id: 9, rol: "operador" }, env.jwtSecret, { expiresIn: "1h" });
+
+for (const [caso, authorization, autorId] of [
+  ["sin token", undefined, null],
+  ["con token vencido", `Bearer ${tokenVencido}`, null],
+  ["con token invalido", "Bearer token-invalido", null],
+  ["con usuario no administrador", `Bearer ${tokenOperador}`, 9],
+]) {
+  test(`HTTP permite ajustes y cobros ${caso}, sin aceptar autor ni cliente del formulario`, async (t) => {
+    const request = await clienteHttp(t);
+    const ajuste = await request("/cobranzas/clientes/4/ajustes", {
+      tipo: "DEBITO", monto: 10, motivo: "Saldo anterior",
+      usuarioId: 999, clienteId: 5, fecha: "2000-01-01",
+    }, authorization);
+    assert.equal(ajuste.status, 200);
+    assert.equal(ajuste.body.resumen.saldoPendiente, 110);
+    assert.equal(estado.ajustes[0].usuarioId, autorId);
+    assert.equal(estado.ajustes[0].clienteId, 4);
+    assert.deepEqual(estado.ajustes[0].fecha, fechaActual);
+    const movimiento = ajuste.body.movimientos.find((item) => item.ajusteId === 1);
+    assert.deepEqual(movimiento.usuario, autorId ? { id: autorId, nombre: "Operador" } : null);
+
+    const cobro = await request("/cobranzas/clientes/4/cobros", {
+      monto: 20, formaPago: "EFECTIVO", clienteId: 5,
+    }, authorization);
+    assert.equal(cobro.status, 200);
+    assert.equal(cobro.body.resumen.saldoPendiente, 90);
+    assert.equal(cobro.body.resumen.totalCobrado, 20);
+    assert.equal(estado.cobros.length, 1);
+    assert.equal(estado.cobros[0].clienteId, 4);
+    assert.equal(estado.cobros[0].ventaId, 20);
+  });
+}
+
+test("HTTP conserva validaciones de monto, motivo y saldo sin exigir sesion", async (t) => {
+  const request = await clienteHttp(t);
+  const anterior = structuredClone(estado);
+  for (const [ruta, body] of [
+    ["ajustes", { tipo: "DEBITO", monto: 10, motivo: " " }],
+    ["ajustes", { tipo: "DEBITO", monto: true, motivo: "Correccion" }],
+    ["cobros", { monto: true }],
+    ["cobros", { monto: 101 }],
+  ]) {
+    const respuesta = await request(`/cobranzas/clientes/4/${ruta}`, body, `Bearer ${tokenVencido}`);
+    assert.equal(respuesta.status, 400);
+    assert.equal(typeof respuesta.body.error, "string");
+    assert.deepEqual(estado, anterior);
   }
-  const res = respuesta();
-  await ajuste.stack.at(-1).handle({
-    params: { clienteId: "4" },
-    user: { id: 9 },
-    body: { tipo: "DEBITO", monto: 10, motivo: "Saldo anterior", usuarioId: 999, clienteId: 5, fecha: "2000-01-01" },
-  }, res);
-  assert.equal(res.statusCode, 200);
-  assert.equal(estado.ajustes[0].usuarioId, 9);
-  assert.equal(estado.ajustes[0].clienteId, 4);
-  assert.deepEqual(estado.ajustes[0].fecha, fechaActual);
-  assert.equal(res.body.resumen.saldoPendiente, 110);
-  const invalida = respuesta();
-  await cobro.stack.at(-1).handle({ params: { clienteId: "4" }, body: { monto: true } }, invalida);
-  assert.equal(invalida.statusCode, 400);
+});
+
+test("HTTP mantiene autenticacion obligatoria en auth/me", async (t) => {
+  const request = await clienteHttp(t);
+  for (const authorization of [undefined, "Bearer token-invalido", `Bearer ${tokenVencido}`]) {
+    const respuesta = await request("/auth/me", undefined, authorization);
+    assert.equal(respuesta.status, 401);
+  }
+  const respuesta = await request("/auth/me", undefined, `Bearer ${tokenOperador}`);
+  assert.equal(respuesta.status, 200);
+  assert.equal(respuesta.body.user.id, 9);
+  assert.equal(respuesta.body.user.rol, "operador");
 });

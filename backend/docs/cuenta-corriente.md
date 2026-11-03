@@ -9,7 +9,8 @@ En **Cobranzas → cliente**:
 
 - **Ajustar saldo** permite aumentar o reducir la deuda, con importe y motivo
   obligatorio. Muestra el saldo resultante antes de guardar. Una reducción mayor
-  a la deuda deja saldo a favor. El historial conserva fecha, motivo y usuario.
+  a la deuda deja saldo a favor. El historial conserva fecha, motivo y, cuando
+  hay una sesión válida, usuario.
 - **Registrar cobro** registra dinero recibido y lo aplica primero a las ventas
   más antiguas; el resto se aplica a la deuda de ajustes. También se puede seguir
   cobrando una venta específica, hasta el saldo neto disponible del cliente.
@@ -26,6 +27,12 @@ otro movimiento de signo contrario y su motivo, conservando el historial.
 Un cobro general puede crear varias asignaciones de cobro. El listado diario
 muestra esas asignaciones y su suma coincide con el dinero recibido.
 
+Los cobros y ajustes no requieren rol de administrador ni una sesión vigente,
+igual que el cobro por venta existente. En este sistema de uso individual, una
+sesión vencida no bloquea estos movimientos. Si el token es válido, el ajuste
+conserva su autor; si falta o no se puede verificar, se registra sin usuario
+asociado. El autor nunca se toma de los datos enviados en el formulario.
+
 ## Activación en el servidor
 
 Aplicar la migración `20261102100000_add_ajustes_cuenta_corriente` antes de arrancar
@@ -39,7 +46,8 @@ npx prisma generate
 
 Luego desplegar el backend y el frontend compilado. La migración crea la tabla de
 ajustes y cambia el valor predeterminado de la forma de pago; no modifica ventas
-ni saldos existentes. Los nuevos formularios usan la sesión autenticada.
+ni saldos existentes. La sesión se usa de forma opcional para identificar al
+autor de los ajustes.
 
 ## Verificación local
 
