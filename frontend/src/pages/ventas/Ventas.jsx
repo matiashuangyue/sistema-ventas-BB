@@ -3,6 +3,7 @@ import { API_URL as API } from "../../config/api";
 import LoadingContent from "../../components/LoadingContent";
 import { getToken } from "../../services/auth";
 import AvisoDeudaCliente from "./AvisoDeudaCliente";
+import { calcularPrecioItem, calcularSubtotalVenta, normalizarAumento, obtenerPrecioAplicado, redondearMonto } from "./preciosVenta";
 
 const VENTA_DRAFT_STORAGE_KEY = "ventas:borrador:v1";
 
@@ -10,6 +11,7 @@ const BORRADOR_INICIAL = {
   busqueda: "",
   carrito: [],
   descuento: 0,
+  aumentoPorcentaje: "0",
   cantidadesBusqueda: {},
   clienteBusqueda: "",
   clienteSeleccionado: null,
@@ -31,6 +33,7 @@ function leerBorradorVenta() {
       ...borrador,
       carrito: Array.isArray(borrador.carrito) ? borrador.carrito : [],
       descuento: Number(borrador.descuento || 0),
+      aumentoPorcentaje: String(borrador.aumentoPorcentaje ?? "0"),
       cantidadesBusqueda:
         borrador.cantidadesBusqueda &&
         typeof borrador.cantidadesBusqueda === "object"
@@ -56,6 +59,7 @@ function ventaTieneDatos(borrador) {
     Boolean(String(borrador.clienteBusqueda || "").trim()) ||
     Boolean(borrador.clienteSeleccionado) ||
     Number(borrador.descuento || 0) > 0 ||
+    Number(borrador.aumentoPorcentaje || 0) !== 0 ||
     String(borrador.formaPago || BORRADOR_INICIAL.formaPago) !== BORRADOR_INICIAL.formaPago ||
     Boolean(borrador.montoPagadoManual) ||
     Boolean(String(borrador.observacionesPago || "").trim())
@@ -81,6 +85,9 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
   const [carrito, setCarrito] = useState(borradorInicialRef.current.carrito);
   const [descuento, setDescuento] = useState(
     borradorInicialRef.current.descuento,
+  );
+  const [aumentoPorcentaje, setAumentoPorcentaje] = useState(
+    borradorInicialRef.current.aumentoPorcentaje,
   );
   const [cantidadesBusqueda, setCantidadesBusqueda] = useState(
     borradorInicialRef.current.cantidadesBusqueda,
@@ -153,6 +160,7 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
       busqueda,
       carrito,
       descuento,
+      aumentoPorcentaje,
       cantidadesBusqueda,
       clienteBusqueda,
       clienteSeleccionado,
@@ -180,6 +188,7 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
     busqueda,
     carrito,
     descuento,
+    aumentoPorcentaje,
     cantidadesBusqueda,
     clienteBusqueda,
     clienteSeleccionado,
@@ -298,6 +307,7 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
     setBusqueda("");
     setCarrito([]);
     setDescuento(0);
+    setAumentoPorcentaje("0");
     setCantidadesBusqueda({});
     setClienteBusqueda("");
     setClienteSeleccionado(null);
@@ -323,31 +333,6 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
   const cargandoVariantesCarrito = carrito.some(
     (item) => !variantes.some((variante) => variante.id === item.varianteId),
   );
-
-  function obtenerPrecioAplicado(variante, cantidad) {
-    if (!variante?.precios?.length || !cantidad || cantidad <= 0) {
-      return {
-        precioUnitario: 0,
-        cantidadMinima: null,
-      };
-    }
-
-    const preciosValidos = variante.precios
-      .filter((p) => p.cantidadMinima != null && p.cantidadMinima <= cantidad)
-      .sort((a, b) => b.cantidadMinima - a.cantidadMinima);
-
-    if (preciosValidos.length === 0) {
-      return {
-        precioUnitario: 0,
-        cantidadMinima: null,
-      };
-    }
-
-    return {
-      precioUnitario: preciosValidos[0].precio,
-      cantidadMinima: preciosValidos[0].cantidadMinima,
-    };
-  }
 
   function handleCantidadBusquedaChange(varianteId, value) {
     setCantidadesBusqueda((prev) => ({
@@ -492,7 +477,7 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
     const { varianteId, tipo, valor } = editandoPrecio;
     const valorNum = Number(valor);
 
-    if (!valor || isNaN(valorNum) || valorNum < 0) {
+    if (!valor || !Number.isFinite(valorNum) || valorNum < 0) {
       alert("Ingresá un valor válido");
       return;
     }
@@ -511,9 +496,9 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
 
     let nuevoPrecio;
     if (tipo === "porcentaje") {
-      nuevoPrecio = Math.round(precioBase * (1 - valorNum / 100) * 100) / 100;
+      nuevoPrecio = redondearMonto(precioBase * (1 - valorNum / 100));
     } else {
-      nuevoPrecio = Math.round(valorNum * 100) / 100;
+      nuevoPrecio = redondearMonto(valorNum);
     }
 
     setCarrito((prev) =>
@@ -533,22 +518,19 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
     );
   }
 
-  function calcularSubtotal() {
-    return carrito.reduce((acc, item) => {
+  const aumentoNumerico = normalizarAumento(aumentoPorcentaje);
+  const subtotalCalculado = calcularSubtotalVenta(carrito, variantes, aumentoPorcentaje);
+  const errorAumento = aumentoNumerico == null
+    ? "Ingresá un porcentaje de aumento mayor o igual a cero."
+    : !Number.isSafeInteger(Math.round(subtotalCalculado * 100)) || carrito.some((item) => {
       const variante = variantes.find((v) => v.id === item.varianteId);
-      if (!variante || !item.cantidad) return acc;
-
-      const aplicado = obtenerPrecioAplicado(variante, Number(item.cantidad));
-      const precio = item.precioEditado != null ? item.precioEditado : aplicado.precioUnitario;
-      return acc + precio * Number(item.cantidad);
-    }, 0);
-  }
-
-  const subtotal = calcularSubtotal();
-  const total = Math.max(0, subtotal - descuento);
+      return variante && !calcularPrecioItem(item, variante, aumentoPorcentaje).valido;
+    }) ? "El aumento genera un importe inválido. Revisá el porcentaje y los precios." : "";
+  const subtotal = errorAumento ? 0 : subtotalCalculado;
+  const total = Math.max(0, redondearMonto(subtotal - descuento));
   const montoPagadoNumerico =
     formaPago === "CUENTA_CORRIENTE" ? 0 : Number(montoPagado || 0);
-  const saldoPendiente = Math.max(0, total - montoPagadoNumerico);
+  const saldoPendiente = Math.max(0, redondearMonto(total - montoPagadoNumerico));
 
   useEffect(() => {
     if (formaPago === "CUENTA_CORRIENTE") {
@@ -583,6 +565,11 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
 
     if (itemsInvalidos) {
       alert("Hay cantidades inválidas en el carrito");
+      return;
+    }
+
+    if (errorAumento) {
+      alert(errorAumento);
       return;
     }
 
@@ -623,6 +610,7 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
         body: JSON.stringify({
             clienteId: clienteSeleccionado?.id || null,
             descuento,
+            aumentoPorcentaje: aumentoNumerico,
             formaPago,
             montoPagado: montoPagadoNumerico,
             observacionesPago: observacionesPago.trim(),
@@ -860,6 +848,28 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
       <div style={styles.bloque}>
         <h3 style={styles.subTitle}>Carrito</h3>
 
+        <div style={styles.aumentoBox}>
+          <label htmlFor="venta-aumento" style={styles.label}>Aumento en todos los ítems (%)</label>
+          <div style={styles.aumentoControles}>
+            <input
+              id="venta-aumento" type="number" min="0" step="0.01" inputMode="decimal"
+              style={styles.inputDescuento} value={aumentoPorcentaje} disabled={confirmandoVenta}
+              onChange={(event) => setAumentoPorcentaje(event.target.value)}
+              aria-describedby={errorAumento ? "venta-aumento-ayuda venta-aumento-error" : "venta-aumento-ayuda"}
+              aria-invalid={Boolean(errorAumento)}
+            />
+            <button type="button" style={styles.btnSecundario}
+              onClick={() => setAumentoPorcentaje("0")}
+              disabled={confirmandoVenta || aumentoPorcentaje === "0" || aumentoPorcentaje === ""}>
+              Quitar aumento
+            </button>
+          </div>
+          <p id="venta-aumento-ayuda" style={styles.aumentoAyuda}>
+            Aumenta el precio de cada ítem, incluidos los que agregues después. Solo para esta venta.
+          </p>
+          {errorAumento && <p id="venta-aumento-error" role="alert" style={styles.aumentoError}>{errorAumento}</p>}
+        </div>
+
         {carrito.length === 0 && (
           <p style={styles.empty}>Todavía no hay productos agregados.</p>
         )}
@@ -875,9 +885,9 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
 
         {carrito.map((item) => {
           const variante = variantes.find((v) => v.id === item.varianteId);
-          const aplicado = obtenerPrecioAplicado(variante, Number(item.cantidad || 0));
-          const precioFinal = item.precioEditado != null ? item.precioEditado : aplicado.precioUnitario;
-          const subtotalItem = precioFinal * Number(item.cantidad || 0);
+          const aplicado = calcularPrecioItem(item, variante, aumentoPorcentaje);
+          const precioFinal = aplicado.valido ? aplicado.precioUnitario : "—";
+          const subtotalItem = aplicado.valido ? aplicado.subtotal : "—";
           const editandoEsteItem = editandoPrecio?.varianteId === item.varianteId;
 
           return (
@@ -904,20 +914,23 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
                 </div>
 
                 <div style={{ ...styles.carritoPrecio, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                  {item.precioEditado != null ? (
+                  {item.precioEditado != null || aumentoNumerico > 0 ? (
                     <>
-                      <span style={styles.precioOriginalTachado}>${aplicado.precioUnitario}</span>
-                      <span style={styles.precioEditadoActivo}>${item.precioEditado}</span>
-                      <button
+                      <span style={styles.precioOriginalTachado} title={aumentoNumerico > 0 ? "Precio antes del aumento" : "Precio de lista"}>
+                        ${aumentoNumerico > 0 ? aplicado.precioBase : aplicado.precioLista}
+                      </span>
+                      <span style={styles.precioEditadoActivo}>${precioFinal}</span>
+                      {item.precioEditado != null && <button
                         style={styles.btnPrecioReset}
                         onClick={() => resetearPrecioEditado(item.varianteId)}
                         disabled={confirmandoVenta}
-                        title="Restaurar precio original"
-                      >✕</button>
+                        title="Quitar precio especial y usar precio de lista con el aumento vigente"
+                      >✕</button>}
                     </>
                   ) : (
-                    <span>${aplicado.precioUnitario}</span>
+                    <span>${precioFinal}</span>
                   )}
+                  {aumentoNumerico > 0 && <span style={styles.aumentoDetalle}>+{aumentoNumerico}%</span>}
                   <button
                     style={editandoEsteItem ? styles.btnPrecioEditarActivo : styles.btnPrecioEditar}
                     onClick={() => editandoEsteItem ? cerrarEditarPrecio() : abrirEditarPrecio(item.varianteId)}
@@ -964,6 +977,9 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
 
               {editandoEsteItem && (
                 <div style={styles.carritoEditarPrecio}>
+                  {aumentoNumerico > 0 && <p style={styles.aumentoAyuda}>
+                    Al precio especial se le aplica el aumento del {aumentoNumerico}%.
+                  </p>}
                   <div style={styles.editarTipoGroup}>
                     <button
                       style={editandoPrecio.tipo === "porcentaje" ? styles.editarTipoActivo : styles.editarTipoInactivo}
@@ -1084,7 +1100,7 @@ export default function Ventas({ onAbrirCuentaCorriente }) {
         <button
           style={styles.btnConfirmar}
           onClick={confirmarVenta}
-          disabled={confirmandoVenta || cargandoVariantesCarrito || consultandoDeuda}
+          disabled={confirmandoVenta || cargandoVariantesCarrito || consultandoDeuda || Boolean(errorAumento)}
         >
           <LoadingContent
             loading={confirmandoVenta || consultandoDeuda}
@@ -1135,6 +1151,14 @@ const styles = {
     marginBottom: 6,
     color: "var(--text-soft)",
   },
+  aumentoBox: {
+    marginTop: 12, marginBottom: 8, padding: 12,
+    border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface-soft)",
+  },
+  aumentoControles: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" },
+  aumentoAyuda: { margin: "8px 0 0", fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 },
+  aumentoError: { margin: "8px 0 0", fontSize: 13, color: "var(--danger)" },
+  aumentoDetalle: { color: "var(--text-soft)", fontSize: 11, whiteSpace: "nowrap" },
   input: {
     width: "100%",
     padding: 10,

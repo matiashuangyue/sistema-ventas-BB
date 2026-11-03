@@ -2,6 +2,7 @@ class CrearVentaDto {
   constructor(body = {}) {
     this.clienteId = body.clienteId == null ? null : Number(body.clienteId);
     this.descuento = Number(body.descuento ?? 0);
+    this.aumentoPorcentaje = body.aumentoPorcentaje === undefined ? 0 : body.aumentoPorcentaje;
     this.formaPago = body.formaPago;
     this.montoPagado =
       body.montoPagado == null || body.montoPagado === ""
@@ -12,7 +13,7 @@ class CrearVentaDto {
       ? body.items.map((item) => ({
           varianteId: item.varianteId,
           cantidad: item.cantidad,
-          precioEditado: item.precioEditado != null ? Number(item.precioEditado) : null,
+          precioEditado: item.precioEditado ?? null,
         }))
       : [];
   }

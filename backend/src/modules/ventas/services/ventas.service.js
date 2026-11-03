@@ -299,6 +299,23 @@ async function crearVenta(dto) {
     throw new AppError("El descuento no puede ser negativo");
   }
 
+  const porcentajeRecibido = dto.aumentoPorcentaje === undefined ? 0 : dto.aumentoPorcentaje;
+  if (!["number", "string"].includes(typeof porcentajeRecibido) ||
+      String(porcentajeRecibido).trim() === "" ||
+      !Number.isFinite(Number(porcentajeRecibido)) || Number(porcentajeRecibido) < 0) {
+    throw new AppError("El aumento debe ser un porcentaje mayor o igual a 0");
+  }
+  const aumentoPorcentaje = Number(porcentajeRecibido);
+  const redondearImporte = (valor) => Math.round((Number(valor) + Number.EPSILON) * 100) / 100;
+  const items = dto.items.map((item) => {
+    if (item.precioEditado == null) return item;
+    if (!["number", "string"].includes(typeof item.precioEditado) ||
+        String(item.precioEditado).trim() === "" || !esMontoValido(Number(item.precioEditado))) {
+      throw new AppError("El precio editado debe ser un numero mayor o igual a 0");
+    }
+    return { ...item, precioEditado: Number(item.precioEditado) };
+  });
+
   const ventaFinal = await ventasRepository.transaction(
     async (tx) => {
       // Los cobros generales bloquean primero al cliente y luego sus ventas.
@@ -315,7 +332,7 @@ async function crearVenta(dto) {
         total: 0,
       });
 
-      for (const item of dto.items) {
+      for (const item of items) {
         const varianteId = Number(item.varianteId);
         const cantidad = Number(item.cantidad);
 
@@ -364,10 +381,7 @@ async function crearVenta(dto) {
         }
 
         const precioEditado = item.precioEditado;
-        const usarPrecioEditado =
-          precioEditado != null &&
-          Number.isFinite(precioEditado) &&
-          precioEditado > 0;
+        const usarPrecioEditado = precioEditado != null;
 
         if (usarPrecioEditado) {
           logger.info(
@@ -375,10 +389,17 @@ async function crearVenta(dto) {
           );
         }
 
-        const precioUnitario = usarPrecioEditado ? precioEditado : preciosDisponibles[0].precio;
-        const subtotalItem = precioUnitario * cantidad;
+        const precioBase = usarPrecioEditado ? precioEditado : preciosDisponibles[0].precio;
+        if (!esMontoValido(precioBase)) throw new AppError("Precio de producto invalido");
+        // Se guarda el precio de cada unidad con aumento, sin recargo adicional al total.
+        const precioUnitario = redondearImporte(precioBase * (1 + aumentoPorcentaje / 100));
+        const subtotalItem = redondearImporte(precioUnitario * cantidad);
+        if (!esMontoValido(precioUnitario) || !esMontoValido(subtotalItem)) {
+          throw new AppError("El aumento genera un importe de producto invalido");
+        }
 
-        subtotal += subtotalItem;
+        subtotal = redondearImporte(subtotal + subtotalItem);
+        if (!esMontoValido(subtotal)) throw new AppError("Subtotal invalido");
 
         await ventasRepository.createVentaDetalle(tx, {
           ventaId: nuevaVenta.id,
@@ -402,7 +423,7 @@ async function crearVenta(dto) {
         throw new AppError("El descuento no puede ser mayor al subtotal");
       }
 
-      const total = redondearMonto(subtotal - dto.descuento);
+      const total = redondearImporte(subtotal - dto.descuento);
       const formaPago = normalizarFormaPago(dto.formaPago || "CUENTA_CORRIENTE");
       const montoPagado = calcularPagoInicial(dto, total, formaPago);
       const saldoPendiente = redondearMonto(total - montoPagado);
